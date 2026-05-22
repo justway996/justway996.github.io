@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>三维工业机械臂控制台</title>
+    <link rel="stylesheet" href="./styles.css?v=20260521d" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="stage" aria-label="三维工业机械臂视图">
+        <canvas id="viewport"></canvas>
+        <div class="hud">
+          <div>
+            <span class="hud-label">末端坐标</span>
+            <strong id="positionReadout">X 0.00 · Y 0.00 · Z 0.00</strong>
+          </div>
+          <div>
+            <span class="hud-label">工作状态</span>
+            <strong id="poseReadout">安全待机</strong>
+          </div>
+        </div>
+      </section>
+
+      <aside class="control-panel" aria-label="机械臂调节控制器">
+        <header class="panel-header">
+          <p>Industrial Robot</p>
+          <h1>可制造六轴机械臂</h1>
+        </header>
+
+        <div class="button-row" aria-label="姿态快捷操作">
+          <button class="icon-button" id="resetBtn" type="button" title="回零姿态" aria-label="回零姿态">
+            <span aria-hidden="true">↺</span>
+          </button>
+          <button class="icon-button" id="randomBtn" type="button" title="生成安全姿态" aria-label="生成安全姿态">
+            <span aria-hidden="true">✦</span>
+          </button>
+          <button class="text-button" id="demoBtn" type="button" aria-pressed="false">
+            <span aria-hidden="true">▶</span>
+            <span>演示</span>
+          </button>
+        </div>
+
+        <div class="joint-list" id="jointControls"></div>
+
+        <section class="readout-panel" aria-label="关节数值">
+          <div>
+            <span>水平半径</span>
+            <strong id="reachReadout">0.00 m</strong>
+          </div>
+          <div>
+            <span>夹爪开口</span>
+            <strong id="gripReadout">0%</strong>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="./app.js?v=20260521i"></script>
+  </body>
+</html>
