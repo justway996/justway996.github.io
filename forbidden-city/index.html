@@ -1,1 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>故宫十二时辰</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="回到开头">
+        <span class="brand-mark">宫</span>
+        <span>故宫十二时辰</span>
+      </a>
+      <nav class="top-nav" aria-label="页面章节">
+        <a href="#scroll-story">长卷</a>
+        <a href="#routes">路线</a>
+        <a href="#collections">典藏</a>
+      </nav>
+      <button class="sound-toggle" type="button" aria-pressed="false" title="切换环境声">
+        <span aria-hidden="true">♪</span>
+        <span class="sound-label">静音</span>
+      </button>
+    </header>
 
+    <main id="top">
+      <section class="scroll-story" id="scroll-story" aria-label="故宫一日长卷">
+        <div class="sticky-stage">
+          <img
+            class="scroll-art"
+            src="assets/forbidden-city-scroll.png"
+            alt="故宫建筑群的长卷式插画，红墙金瓦在晨昏光线中展开"
+          />
+          <div class="wash-layer" aria-hidden="true"></div>
+          <div class="hero-copy">
+            <p class="eyebrow">紫禁城的一日游</p>
+            <h1>故宫十二时辰</h1>
+            <p>
+              从午门晨光到神武暮色，沿着中轴线、后宫与御花园，读懂一座宫城如何在时间里呼吸。
+            </p>
+          </div>
+          <div class="scene-track" aria-label="时辰章节">
+            <article class="scene-card" data-time="卯时" style="--x: 4%; --y: 58%">
+              <span>05:00</span>
+              <h2>午门晨启</h2>
+              <p>城门与阙楼迎来第一束光，宫城的尺度从这里展开。</p>
+            </article>
+            <article class="scene-card" data-time="辰时" style="--x: 26%; --y: 34%">
+              <span>07:00</span>
+              <h2>金水桥影</h2>
+              <p>五座石桥跨过内金水河，礼制秩序藏在路径与方位里。</p>
+            </article>
+            <article class="scene-card" data-time="巳时" style="--x: 39%; --y: 61%">
+              <span>09:00</span>
+              <h2>太和朝仪</h2>
+              <p>三大殿层层抬升，太和殿是紫禁城最庄严的中心。</p>
+            </article>
+            <article class="scene-card" data-time="午时" style="--x: 52%; --y: 38%">
+              <span>11:00</span>
+              <h2>中轴日正</h2>
+              <p>日光落在丹陛与脊兽上，建筑语言显出皇城的分寸。</p>
+            </article>
+            <article class="scene-card" data-time="未时" style="--x: 64%; --y: 64%">
+              <span>13:00</span>
+              <h2>乾清日影</h2>
+              <p>前朝转入内廷，乾清宫见证政务、家国与日常交织。</p>
+            </article>
+            <article class="scene-card" data-time="申时" style="--x: 76%; --y: 33%">
+              <span>15:00</span>
+              <h2>交泰印信</h2>
+              <p>印玺、册宝与空间秩序，让制度化为可触的器物。</p>
+            </article>
+            <article class="scene-card" data-time="酉时" style="--x: 88%; --y: 58%">
+              <span>17:00</span>
+              <h2>御园风起</h2>
+              <p>亭台、古柏与叠石收束宫城节奏，留出一段清雅。</p>
+            </article>
+            <article class="scene-card" data-time="戌时" style="--x: 94%; --y: 42%">
+              <span>19:00</span>
+              <h2>神武暮鼓</h2>
+              <p>暮色从北门合拢，宫城在夜色中回到沉静。</p>
+            </article>
+          </div>
+          <aside class="story-inspector" aria-live="polite">
+            <p class="inspector-kicker">当前时辰</p>
+            <h2 id="sceneTitle">午门晨启</h2>
+            <p id="sceneCopy">城门与阙楼迎来第一束光，宫城的尺度从这里展开。</p>
+            <p class="inspector-tip">点选长卷中的时辰卡片，查看对应故事。</p>
+            <div class="inspector-actions">
+              <button class="round-action" type="button" id="prevScene" aria-label="上一个时辰">‹</button>
+              <button class="round-action" type="button" id="nextScene" aria-label="下一个时辰">›</button>
+            </div>
+          </aside>
+          <div class="progress-wrap" aria-hidden="true">
+            <div class="progress-bar"></div>
+          </div>
+          <div class="scroll-hint">向下滚动，展开宫城长卷</div>
+        </div>
+      </section>
+
+      <section class="time-panel" aria-label="时辰索引">
+        <div class="section-heading">
+          <p class="eyebrow">Timeline</p>
+          <h2>用时间阅读宫城</h2>
+        </div>
+        <div class="time-grid" id="timeGrid"></div>
+        <article class="time-detail" id="timeDetail" aria-live="polite"></article>
+      </section>
+
+      <section class="routes" id="routes" aria-label="参观路线">
+        <div class="section-heading">
+          <p class="eyebrow">Routes</p>
+          <h2>三条入门路线</h2>
+        </div>
+        <div class="route-list">
+          <article class="route-card">
+            <span>01</span>
+            <h3>中轴礼制线</h3>
+            <p>午门、太和门、三大殿、乾清门。适合第一次理解紫禁城的空间秩序。</p>
+          </article>
+          <article class="route-card">
+            <span>02</span>
+            <h3>内廷生活线</h3>
+            <p>乾清宫、交泰殿、坤宁宫、东西六宫。看制度背后的日常与家族关系。</p>
+          </article>
+          <article class="route-card">
+            <span>03</span>
+            <h3>园林典藏线</h3>
+            <p>御花园、珍宝馆、钟表馆。把建筑、器物与审美放在同一段行程里。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="collections" id="collections" aria-label="典藏看点">
+        <div class="section-heading">
+          <p class="eyebrow">Highlights</p>
+          <h2>把一件器物放回时代</h2>
+        </div>
+        <div class="collection-board">
+          <button class="artifact active" type="button" data-artifact="bronze">青铜礼器</button>
+          <button class="artifact" type="button" data-artifact="ceramic">御窑瓷器</button>
+          <button class="artifact" type="button" data-artifact="clock">宫廷钟表</button>
+          <button class="artifact" type="button" data-artifact="painting">书画长卷</button>
+          <div class="artifact-detail" id="artifactDetail" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>视觉长卷为本项目生成资产。内容为故宫主题介绍页示例，可继续扩展为多章节导览。</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
