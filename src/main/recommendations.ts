@@ -47,10 +47,13 @@ function scoreWorkflow(query: string, workflow: WorkflowDefinition): number {
 
 function matchScore(query: string, text: string, weight: number): number {
   if (!text) return 0;
-  if (query.includes(text) || text.includes(query)) return weight * 2;
+  const compactQuery = compact(query);
+  const compactText = compact(text);
+  if (compactQuery.includes(compactText) || compactText.includes(compactQuery)) return weight * 2;
 
-  const terms = text.match(/[a-z0-9]+|[\u3400-\u9fff]{2,}/gi) ?? [];
-  return terms.some((term) => term.length > 1 && query.includes(term)) ? weight : 0;
+  const queryTerms = terms(query);
+  const textTerms = new Set(terms(text));
+  return queryTerms.some((term) => term.length > 1 && textTerms.has(term)) ? weight : 0;
 }
 
 function workflowStatus(workflow: WorkflowDefinition, skills: SkillRecord[]): WorkflowStatus {
@@ -86,7 +89,15 @@ function isKnownSkill(skill: SkillRecord | undefined): skill is SkillRecord {
 }
 
 function normalize(value: string): string {
-  return value.toLocaleLowerCase().replace(/\s+/g, '').trim();
+  return value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function compact(value: string): string {
+  return value.replace(/\s+/g, '');
+}
+
+function terms(value: string): string[] {
+  return value.match(/[a-z0-9]+|[\u3400-\u9fff]{2,}/gi) ?? [];
 }
 
 function statusReason(status: WorkflowStatus): string {

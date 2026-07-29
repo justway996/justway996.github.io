@@ -42,4 +42,10 @@ describe('workflow recommendations', () => {
 
     expect(results[0]?.status).toBe('conflict');
   });
+
+  it('matches multi-word English proposal searches', () => {
+    const results = recommendWorkflows('proposal for a client', catalog, readySkills);
+
+    expect(results[0]).toMatchObject({ workflowId: 'prop-client-proposal', status: 'ready' });
+  });
 });
