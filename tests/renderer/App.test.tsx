@@ -137,7 +137,9 @@ describe('Toolbox application', () => {
     expect(supportingCopy).toHaveValue('持续观察，持续创作。');
   });
 
-  it('emphasizes a hovered page, then enters the turning phase before opening its target', async () => {
+  it('pulls a hovered page forward with depth only and no white outline box', () => {
+    const styles = readFileSync('src/renderer/styles.css', 'utf8');
+    const approvedCoverStyles = styles.slice(styles.indexOf('/* Approved homepage cover'));
     vi.useFakeTimers();
     const api = createApi({
       workflowId: proposalWorkflow.id,
@@ -154,14 +156,50 @@ describe('Toolbox application', () => {
 
     expect(screen.getByRole('main')).toHaveAttribute('data-hovered-page', 'workflows');
     expect(workflowDoor).toHaveClass('portal-door--hovered');
+    expect(workflowDoor).toHaveClass('portal-door--pull-forward');
+    expect(workflowDoor).toHaveAttribute('data-hover-treatment', 'depth-only');
+    expect(approvedCoverStyles).toMatch(
+      /\.home-cover \.portal-door--pull-forward\s*\{[^}]*border-color:\s*transparent;[^}]*box-shadow:[^}]*rgba\(0,\s*0,\s*0,/s,
+    );
+    expect(approvedCoverStyles).not.toMatch(
+      /\.home-cover \.portal-door--pull-forward\s*\{[^}]*box-shadow:[^}]*(?:#fff|rgba\(255,\s*255,\s*255,)/s,
+    );
+  });
 
+  it('shows target content while visiting every book phase before opening its target', () => {
+    vi.useFakeTimers();
+    const api = createApi({
+      workflowId: proposalWorkflow.id,
+      title: proposalWorkflow.name,
+      status: 'ready',
+      reason: '所需工具已就绪。',
+    });
+
+    render(<App api={api} />);
+
+    const workflowDoor = screen.getByRole('button', { name: '工作流' });
     fireEvent.click(workflowDoor);
 
-    expect(screen.getByRole('main')).toHaveClass('home-portal--turning');
-    expect(workflowDoor).toHaveClass('portal-door--turning');
+    const cover = screen.getByRole('main');
+    const preview = screen.getByRole('region', { name: '工作流页面预览' });
+
+    expect(cover).toHaveAttribute('data-book-phase', 'selected');
+    expect(preview).toHaveTextContent('工作流');
+    expect(preview).toHaveTextContent('把稳定的业务步骤保存下来，在每次项目中直接复用。');
     expect(screen.queryByRole('heading', { name: '工作流', level: 1 })).not.toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(820));
+    act(() => vi.advanceTimersByTime(140));
+    expect(cover).toHaveAttribute('data-book-phase', 'flip-fast');
+    expect(preview).toHaveTextContent('把稳定的业务步骤保存下来，在每次项目中直接复用。');
+
+    act(() => vi.advanceTimersByTime(240));
+    expect(cover).toHaveAttribute('data-book-phase', 'flip-slow');
+    expect(preview).toHaveTextContent('把稳定的业务步骤保存下来，在每次项目中直接复用。');
+
+    act(() => vi.advanceTimersByTime(260));
+    expect(cover).toHaveAttribute('data-book-phase', 'child-emerge');
+
+    act(() => vi.advanceTimersByTime(180));
 
     expect(screen.getByRole('heading', { name: '工作流', level: 1 })).toBeInTheDocument();
   });
