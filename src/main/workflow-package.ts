@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { WorkflowDefinition } from '../shared/models.js';
 
 const sensitiveKeyPattern = /token|secret|apiKey|password/i;
-const sensitiveTextPattern = /(?:^|[\s{,])(?:token|secret|api[_-]?key|password)\s*[:=]/im;
+const sensitiveTextPattern = /(?:^|[\s{,])(?=[A-Za-z_])[A-Za-z0-9_-]*(?:token|secret|api[-_]?key|password)[A-Za-z0-9_-]*\s*[:=]/im;
 const sensitiveMessage = '敏感凭据';
 
 const dependencySchema = z.object({

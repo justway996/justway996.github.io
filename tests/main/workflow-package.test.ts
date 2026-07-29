@@ -67,6 +67,15 @@ describe('workflow packages', () => {
     await expect(validatePackage(archive)).rejects.toThrow('敏感凭据');
   });
 
+  it.each(['OPENAI_API_KEY', 'GITHUB_TOKEN', 'MY_SECRET'])('rejects prefixed secret key %s in text files', async (key) => {
+    const archiveDirectory = await createTemporaryDirectory();
+    const archive = await writePackageArchive(archiveDirectory, (zip) => {
+      zip.file('tools/config.yaml', `${key}=do-not-export\n`);
+    });
+
+    await expect(validatePackage(archive)).rejects.toThrow('敏感凭据');
+  });
+
   it('rejects .env files in allowlisted directories', async () => {
     const archiveDirectory = await createTemporaryDirectory();
     const archive = await writePackageArchive(archiveDirectory, (zip) => {
