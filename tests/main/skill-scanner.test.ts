@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -52,6 +52,24 @@ describe('local Codex skill scanner', () => {
   it('ignores SKILL.md files with malformed front matter', async () => {
     const tempDir = await createTempDirectory();
     await writeSkill(tempDir, '.codex/skills/broken/SKILL.md', '---\nname: [unterminated\ndescription: Broken metadata\n---\n');
+
+    await expect(scanSkills({ globalRoot: tempDir })).resolves.toEqual([]);
+  });
+
+  it('ignores indented front matter fields', async () => {
+    const tempDir = await createTempDirectory();
+    await writeSkill(tempDir, '.codex/skills/indented/SKILL.md', '---\n  name: ppt\n  description: Make slides\n---\n');
+
+    await expect(scanSkills({ globalRoot: tempDir })).resolves.toEqual([]);
+  });
+
+  it('does not traverse a linked directory outside the configured root', async () => {
+    const tempDir = await createTempDirectory();
+    const outsideDir = await createTempDirectory();
+    await writeSkill(outsideDir, 'escaped/SKILL.md', '---\nname: escaped\ndescription: Outside root\n---');
+    const linkPath = join(tempDir, '.codex', 'skills', 'linked');
+    await mkdir(join(linkPath, '..'), { recursive: true });
+    await symlink(outsideDir, linkPath, 'junction');
 
     await expect(scanSkills({ globalRoot: tempDir })).resolves.toEqual([]);
   });

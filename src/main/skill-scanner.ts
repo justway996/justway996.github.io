@@ -98,7 +98,7 @@ function parseFrontMatter(content: string): Record<string, string> | null {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
-    const field = trimmed.match(/^([A-Za-z][A-Za-z0-9_-]*):[ \t]+(.+)$/);
+    const field = line.match(/^([A-Za-z][A-Za-z0-9_-]*):[ \t]+(.+)$/);
     if (!field) return null;
 
     const value = parseScalar(field[2]);
