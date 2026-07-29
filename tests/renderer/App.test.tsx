@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -63,7 +64,7 @@ function enterPortalPage(label: '总览' | '发现' | '工作流' | '我的工�
 }
 
 describe('Toolbox application', () => {
-  it('shows five named portal controls and opens the selected business page', async () => {
+  it('keeps five Chinese portal controls stable and opens 工作流 exactly', async () => {
     vi.useFakeTimers();
     const api = createApi({
       workflowId: proposalWorkflow.id,
@@ -72,8 +73,15 @@ describe('Toolbox application', () => {
       reason: '所需工具已就绪。',
     });
 
-    render(<App api={api} />);
+    const rendererDocument = new DOMParser().parseFromString(
+      readFileSync('src/renderer/index.html', 'utf8'),
+      'text/html',
+    );
 
+    expect(rendererDocument.documentElement.getAttribute('lang')).toBe('zh-CN');
+    expect(rendererDocument.documentElement.getAttribute('translate')).toBe('no');
+
+    render(<App api={api} />);
     const portal = screen.getByRole('navigation', { name: '工具箱入口' });
     const controls = within(portal).getAllByRole('button');
 
@@ -90,6 +98,7 @@ describe('Toolbox application', () => {
     act(() => vi.advanceTimersByTime(820));
 
     expect(screen.getByRole('heading', { name: '工作流', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '发现', level: 1 })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '主要功能' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: '工具箱入口' })).not.toBeInTheDocument();
   });
