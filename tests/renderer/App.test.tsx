@@ -64,7 +64,7 @@ function enterPortalPage(label: '总览' | '发现' | '工作流' | '我的工�
 }
 
 describe('Toolbox application', () => {
-  it('keeps five Chinese portal controls stable and opens 工作流 exactly', async () => {
+  it('uses the approved cover with five stable portal controls and opens 工作流 exactly', async () => {
     vi.useFakeTimers();
     const api = createApi({
       workflowId: proposalWorkflow.id,
@@ -82,6 +82,10 @@ describe('Toolbox application', () => {
     expect(rendererDocument.documentElement.getAttribute('translate')).toBe('no');
 
     render(<App api={api} />);
+    expect(screen.getByRole('img', { name: '个人工具箱首页封面' })).toHaveAttribute(
+      'src',
+      expect.stringContaining('approved-homepage-cover'),
+    );
     const portal = screen.getByRole('navigation', { name: '工具箱入口' });
     const controls = within(portal).getAllByRole('button');
 
@@ -103,7 +107,37 @@ describe('Toolbox application', () => {
     expect(screen.queryByRole('navigation', { name: '工具箱入口' })).not.toBeInTheDocument();
   });
 
-  it('turns the selected portal door like a page before opening its target', async () => {
+  it('updates the rendered cover copy when the narrative fields are edited', async () => {
+    const api = createApi({
+      workflowId: proposalWorkflow.id,
+      title: proposalWorkflow.name,
+      status: 'ready',
+      reason: '所需工具已就绪。',
+    });
+    const user = userEvent.setup();
+
+    render(<App api={api} />);
+
+    const title = screen.getByRole('textbox', { name: '中文标题' });
+    const subtitle = screen.getByRole('textbox', { name: '英文副标题' });
+    const supportingCopy = screen.getByRole('textbox', { name: '支持文案' });
+
+    expect(title).toHaveValue('我的工作成长之旅');
+    expect(subtitle).toHaveValue("A PROFESSIONAL'S GROWTH JOURNEY");
+
+    await user.clear(title);
+    await user.type(title, '我的摄影成长之旅');
+    await user.clear(subtitle);
+    await user.type(subtitle, "A PHOTOGRAPHER'S GROWTH JOURNEY");
+    await user.clear(supportingCopy);
+    await user.type(supportingCopy, '持续观察，持续创作。');
+
+    expect(title).toHaveValue('我的摄影成长之旅');
+    expect(subtitle).toHaveValue("A PHOTOGRAPHER'S GROWTH JOURNEY");
+    expect(supportingCopy).toHaveValue('持续观察，持续创作。');
+  });
+
+  it('emphasizes a hovered page, then enters the turning phase before opening its target', async () => {
     vi.useFakeTimers();
     const api = createApi({
       workflowId: proposalWorkflow.id,
@@ -116,6 +150,11 @@ describe('Toolbox application', () => {
 
     const portal = screen.getByRole('navigation', { name: '工具箱入口' });
     const workflowDoor = within(portal).getByRole('button', { name: '工作流' });
+    fireEvent.mouseEnter(workflowDoor);
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-hovered-page', 'workflows');
+    expect(workflowDoor).toHaveClass('portal-door--hovered');
+
     fireEvent.click(workflowDoor);
 
     expect(screen.getByRole('main')).toHaveClass('home-portal--turning');
