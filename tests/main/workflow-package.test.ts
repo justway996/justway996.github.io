@@ -23,6 +23,16 @@ async function createTemporaryDirectory(): Promise<string> {
   return directory;
 }
 
+async function writePackageArchive(directory: string, configure: (zip: JSZip) => void): Promise<string> {
+  const archivePath = join(directory, 'workflow.workflow.zip');
+  const zip = new JSZip();
+  zip.file('workflow.json', JSON.stringify(workflow));
+  zip.file('lock.json', JSON.stringify({ dependencies: workflow.dependencies }));
+  configure(zip);
+  await writeFile(archivePath, await zip.generateAsync({ type: 'nodebuffer' }));
+  return archivePath;
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { force: true, recursive: true })));
 });
@@ -41,12 +51,40 @@ describe('workflow packages', () => {
 
   it('rejects archives containing a token-like field', async () => {
     const archiveDirectory = await createTemporaryDirectory();
-    const secretArchive = join(archiveDirectory, 'secret.workflow.zip');
-    const zip = new JSZip();
-    zip.file('workflow.json', JSON.stringify({ ...workflow, token: 'do-not-export' }));
-    zip.file('lock.json', JSON.stringify({ dependencies: workflow.dependencies }));
-    await writeFile(secretArchive, await zip.generateAsync({ type: 'nodebuffer' }));
+    const secretArchive = await writePackageArchive(archiveDirectory, (zip) => {
+      zip.file('workflow.json', JSON.stringify({ ...workflow, token: 'do-not-export' }));
+    });
 
-    await expect(validatePackage(secretArchive)).rejects.toThrow('鏁忔劅鍑嵁');
+    await expect(validatePackage(secretArchive)).rejects.toThrow('敏感凭据');
+  });
+
+  it('rejects secret markers in allowlisted text files', async () => {
+    const archiveDirectory = await createTemporaryDirectory();
+    const archive = await writePackageArchive(archiveDirectory, (zip) => {
+      zip.file('tools/SKILL.md', 'name: demo\napiKey: do-not-export\n');
+    });
+
+    await expect(validatePackage(archive)).rejects.toThrow('敏感凭据');
+  });
+
+  it('rejects .env files in allowlisted directories', async () => {
+    const archiveDirectory = await createTemporaryDirectory();
+    const archive = await writePackageArchive(archiveDirectory, (zip) => {
+      zip.file('assets/.env', 'TOKEN=do-not-export');
+    });
+
+    await expect(validatePackage(archive)).rejects.toThrow('敏感凭据');
+  });
+
+  it.each([
+    ['non-allowlisted files', 'private.txt'],
+    ['traversal paths', 'tools/../private.txt'],
+  ])('rejects %s', async (_description, entryName) => {
+    const archiveDirectory = await createTemporaryDirectory();
+    const archive = await writePackageArchive(archiveDirectory, (zip) => {
+      zip.file(entryName, 'safe text');
+    });
+
+    await expect(validatePackage(archive)).rejects.toThrow('Package contains an unsupported file.');
   });
 });

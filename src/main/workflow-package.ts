@@ -5,7 +5,8 @@ import { z } from 'zod';
 import type { WorkflowDefinition } from '../shared/models.js';
 
 const sensitiveKeyPattern = /token|secret|apiKey|password/i;
-const sensitiveMessage = '鏁忔劅鍑嵁';
+const sensitiveTextPattern = /(?:^|[\s{,])(?:token|secret|api[_-]?key|password)\s*[:=]/im;
+const sensitiveMessage = '敏感凭据';
 
 const dependencySchema = z.object({
   skillId: z.string().min(1),
@@ -78,8 +79,11 @@ export async function validatePackage(archivePath: string): Promise<WorkflowPack
 
     const name = entry.unsafeOriginalName ?? entry.name;
     validateEntryName(name);
+    const text = decodeText(await entry.async('nodebuffer'));
+    if (text !== undefined) rejectSensitiveText(text);
+
     if (name.endsWith('.json')) {
-      const parsed = parseJson(await entry.async('string'), name);
+      const parsed = parseJson(text, name);
       rejectSensitiveData(parsed);
 
       if (name === 'workflow.json') workflowContent = parsed;
@@ -111,7 +115,17 @@ function parseLock(value: unknown): WorkflowLock {
   return lockSchema.parse(value);
 }
 
-function parseJson(content: string, name: string): unknown {
+function decodeText(value: Uint8Array): string | undefined {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseJson(content: string | undefined, name: string): unknown {
+  if (content === undefined) throw new Error(`Invalid JSON in ${name}.`);
+
   try {
     return JSON.parse(content);
   } catch {
@@ -131,6 +145,10 @@ function rejectSensitiveData(value: unknown): void {
       rejectSensitiveData(child);
     }
   }
+}
+
+function rejectSensitiveText(value: string): void {
+  if (sensitiveTextPattern.test(value)) throw new Error(sensitiveMessage);
 }
 
 function validateEntryName(name: string): void {
