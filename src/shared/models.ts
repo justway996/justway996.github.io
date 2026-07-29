@@ -41,9 +41,56 @@ export type ChangePlan = {
   changes: Array<{ path: string; description: string }>;
 };
 
+export type PlanPreviewRequest =
+  | { kind: 'repair' }
+  | { kind: 'delete'; paths: string[] }
+  | {
+    kind: 'update';
+    targetPath: string;
+    trusted: boolean;
+    compatible: boolean;
+    permissionsUnchanged: boolean;
+  };
+
+export type MaintenanceOperation = {
+  kind: 'copy' | 'delete' | 'update';
+  path: string;
+  sourcePath?: string;
+};
+
+export type BackupManifest = {
+  manifestPath: string;
+  entries: Array<{ path: string; backupPath?: string }>;
+};
+
+export type MaintenancePlan = {
+  id: string;
+  managedRoot: string;
+  operations: MaintenanceOperation[];
+  impact: string;
+  risk: string;
+  backup: BackupManifest;
+  autoApplyEligible: boolean;
+};
+
+export type WorkflowPackageResult = {
+  workflow: WorkflowDefinition;
+  lock: { dependencies: WorkflowDefinition['dependencies'] };
+};
+
+export type WorkflowRecommendation = {
+  workflowId: string;
+  title: string;
+  status: WorkflowStatus;
+  reason: string;
+};
+
 export type ToolboxApi = {
-  listSkills(): Promise<SkillRecord[]>;
+  scan(): Promise<SkillRecord[]>;
+  search(query: string): Promise<WorkflowRecommendation[]>;
   listWorkflows(): Promise<WorkflowDefinition[]>;
-  preflightWorkflow(workflowId: string): Promise<PreflightResult>;
-  createChangePlan(workflowId: string): Promise<ChangePlan>;
+  importPackage(): Promise<WorkflowPackageResult | undefined>;
+  exportWorkflow(workflowId: string): Promise<string | undefined>;
+  previewPlan(request: PlanPreviewRequest): Promise<MaintenancePlan | undefined>;
+  applyPlan(planId: string, confirmed: boolean): Promise<void>;
 };

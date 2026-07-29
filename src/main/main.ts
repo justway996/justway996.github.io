@@ -1,5 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getScanPaths } from './app-paths.js';
+import { registerToolboxHandlers } from './ipc.js';
 import { getRendererUrl } from './renderer-url.js';
 
 const currentDirectory = fileURLToPath(new URL('.', import.meta.url));
@@ -15,6 +18,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: join(currentDirectory, '../preload/index.js'),
     },
   });
 
@@ -23,6 +27,12 @@ function createWindow(): void {
 
 if (process.versions.electron) {
   app.whenReady().then(() => {
+    registerToolboxHandlers({
+      ipcMain,
+      dialog,
+      getAppDataPath: () => app.getPath('userData'),
+      getScanPaths,
+    });
     createWindow();
 
     app.on('activate', () => {

@@ -1,28 +1,8 @@
 import { copyFile, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+import type { BackupManifest, MaintenanceOperation, MaintenancePlan } from '../shared/models.js';
 
-type OperationKind = 'copy' | 'delete' | 'update';
-
-export type MaintenanceOperation = {
-  kind: OperationKind;
-  path: string;
-  sourcePath?: string;
-};
-
-export type BackupManifest = {
-  manifestPath: string;
-  entries: Array<{ path: string; backupPath?: string }>;
-};
-
-export type MaintenancePlan = {
-  id: string;
-  managedRoot: string;
-  operations: MaintenanceOperation[];
-  impact: string;
-  risk: string;
-  backup: BackupManifest;
-  autoApplyEligible: boolean;
-};
+export type { BackupManifest, MaintenanceOperation, MaintenancePlan } from '../shared/models.js';
 
 export type RepairOptions = { sourcePath: string; managedRoot: string; targetPath?: string };
 export type DeleteOptions = { managedRoot: string; paths: string[] };
