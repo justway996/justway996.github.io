@@ -1,5 +1,5 @@
-import { copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, join, relative, resolve } from 'node:path';
+import { copyFile, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 type OperationKind = 'copy' | 'delete' | 'update';
 
@@ -37,10 +37,13 @@ export type UpdateOptions = {
 
 type StoredManifest = BackupManifest & { operations: MaintenanceOperation[] };
 
+type ManagedContext = { root: string; realRoot: string };
+
 export async function planRepair(options: RepairOptions): Promise<MaintenancePlan> {
   const targetPath = options.targetPath ?? basename(resolve(options.sourcePath));
   const sourceFiles = await filesIn(options.sourcePath);
   const target = withinManagedRoot(options.managedRoot, targetPath);
+  if (await pathExists(target)) throw new Error('Repair target already exists.');
   const operations = sourceFiles.map((sourcePath) => ({
     kind: 'copy' as const,
     path: relative(resolve(options.managedRoot), join(target, relative(resolve(options.sourcePath), sourcePath))),
@@ -52,10 +55,15 @@ export async function planRepair(options: RepairOptions): Promise<MaintenancePla
 
 export async function planDelete(options: DeleteOptions): Promise<MaintenancePlan> {
   const operations: MaintenanceOperation[] = [];
+  const plannedPaths = new Set<string>();
   for (const path of options.paths) {
     const target = withinManagedRoot(options.managedRoot, path);
     for (const file of await filesIn(target)) {
-      operations.push({ kind: 'delete', path: relative(resolve(options.managedRoot), file) });
+      const plannedPath = relative(resolve(options.managedRoot), file);
+      if (!plannedPaths.has(plannedPath.toLowerCase())) {
+        plannedPaths.add(plannedPath.toLowerCase());
+        operations.push({ kind: 'delete', path: plannedPath });
+      }
     }
   }
 
@@ -81,39 +89,48 @@ export async function applyPlan(plan: MaintenancePlan, confirmed: boolean): Prom
     throw new Error('Update is not trusted, compatible, and permission-preserving.');
   }
 
-  const manifest: StoredManifest = { ...plan.backup, entries: [], operations: plan.operations };
-  await mkdir(resolve(plan.managedRoot), { recursive: true });
-  await mkdir(resolve(plan.managedRoot, '.change-planner-backups', plan.id), { recursive: true });
+  const context = await managedContext(plan.managedRoot);
+  const backupDirectory = await ensureManagedDirectory(context, join('.change-planner-backups', plan.id));
+  const manifestPath = backupManifestPath(context, plan, backupDirectory);
+  const manifest: StoredManifest = { ...plan.backup, manifestPath, entries: [], operations: plan.operations };
+  await writeManifest(manifestPath, manifest);
 
   for (const [index, operation] of plan.operations.entries()) {
-    const target = withinManagedRoot(plan.managedRoot, operation.path);
-    const backupPath = join(resolve(plan.managedRoot, '.change-planner-backups', plan.id), `${index}.backup`);
+    const target = await safeManagedPath(context, operation.path);
+    const backupPath = await safeManagedPath(context, join('.change-planner-backups', plan.id, `${index}.backup`));
     const exists = await pathExists(target);
     if (exists) {
-      await mkdir(join(backupPath, '..'), { recursive: true });
+      await ensureManagedDirectory(context, join('.change-planner-backups', plan.id));
       await copyFile(target, backupPath);
     }
     manifest.entries.push({ path: operation.path, ...(exists ? { backupPath } : {}) });
+    await writeManifest(manifestPath, manifest);
 
     if (operation.kind === 'delete') {
       if (exists) await rm(target);
     } else {
       if (!operation.sourcePath) throw new Error('Copy operation is missing a source path.');
-      await mkdir(join(target, '..'), { recursive: true });
+      await ensureManagedDirectory(context, relative(context.root, dirname(target)));
+      await safeManagedPath(context, operation.path);
       await copyFile(operation.sourcePath, target);
     }
   }
 
-  await writeFile(plan.backup.manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+  await writeManifest(manifestPath, manifest);
 }
 
 export async function restorePlan(plan: MaintenancePlan): Promise<void> {
-  const manifest = JSON.parse(await readFile(plan.backup.manifestPath, 'utf8')) as StoredManifest;
+  const context = await managedContext(plan.managedRoot);
+  const backupDirectory = await ensureManagedDirectory(context, join('.change-planner-backups', plan.id));
+  const manifestPath = backupManifestPath(context, plan, backupDirectory);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as StoredManifest;
   for (const entry of manifest.entries) {
-    const target = withinManagedRoot(plan.managedRoot, entry.path);
+    const target = await safeManagedPath(context, entry.path);
     if (entry.backupPath) {
-      await mkdir(join(target, '..'), { recursive: true });
-      await copyFile(entry.backupPath, target);
+      const backupPath = await safeManagedPath(context, relative(context.root, entry.backupPath));
+      await ensureManagedDirectory(context, relative(context.root, dirname(target)));
+      await safeManagedPath(context, entry.path);
+      await copyFile(backupPath, target);
     } else {
       await rm(target, { force: true });
     }
@@ -150,6 +167,81 @@ function withinManagedRoot(managedRoot: string, path: string): string {
   const target = resolve(root, path);
   if (target === root || relative(root, target).startsWith('..')) throw new Error('Path must stay inside the supplied managed root.');
   return target;
+}
+
+async function managedContext(managedRoot: string): Promise<ManagedContext> {
+  const root = resolve(managedRoot);
+  await assertNoReparsePoint(root);
+  await mkdir(root, { recursive: true });
+  await assertNoReparsePoint(root);
+  const entry = await lstat(root);
+  if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error('Managed root cannot be a reparse point.');
+  return { root, realRoot: await realpath(root) };
+}
+
+async function safeManagedPath(context: ManagedContext, path: string): Promise<string> {
+  const target = withinManagedRoot(context.root, path);
+  await assertNoReparsePoint(target);
+  const existing = await nearestExistingPath(target);
+  const realExisting = await realpath(existing);
+  if (realExisting !== context.realRoot && !realExisting.startsWith(`${context.realRoot}\\`) && !realExisting.startsWith(`${context.realRoot}/`)) {
+    throw new Error('Managed path crosses a reparse point.');
+  }
+  return target;
+}
+
+async function ensureManagedDirectory(context: ManagedContext, path: string): Promise<string> {
+  const directory = resolve(context.root, path);
+  if (directory !== context.root && relative(context.root, directory).startsWith('..')) throw new Error('Path must stay inside the supplied managed root.');
+  const segments = relative(context.root, directory).split(/[\\/]/).filter(Boolean);
+  let current = context.root;
+  for (const segment of segments) {
+    current = join(current, segment);
+    await assertNoReparsePoint(current);
+    if (await pathExists(current)) {
+      const entry = await lstat(current);
+      if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error('Managed path crosses a reparse point.');
+    } else {
+      await mkdir(current);
+    }
+  }
+  await safeManagedPath(context, relative(context.root, directory) || '.change-planner-root');
+  return directory;
+}
+
+function backupManifestPath(context: ManagedContext, plan: MaintenancePlan, backupDirectory: string): string {
+  const expected = join(backupDirectory, 'manifest.json');
+  if (resolve(plan.backup.manifestPath) !== expected) throw new Error('Backup manifest path is invalid.');
+  return expected;
+}
+
+async function writeManifest(path: string, manifest: StoredManifest): Promise<void> {
+  await writeFile(path, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+async function assertNoReparsePoint(path: string): Promise<void> {
+  let current = resolve(path);
+  while (true) {
+    try {
+      const entry = await lstat(current);
+      if (entry.isSymbolicLink()) throw new Error('Managed path crosses a reparse point.');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const parent = dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
+}
+
+async function nearestExistingPath(path: string): Promise<string> {
+  let current = resolve(path);
+  while (!(await pathExists(current))) {
+    const parent = dirname(current);
+    if (parent === current) throw new Error('Managed root does not exist.');
+    current = parent;
+  }
+  return current;
 }
 
 async function pathExists(path: string): Promise<boolean> {

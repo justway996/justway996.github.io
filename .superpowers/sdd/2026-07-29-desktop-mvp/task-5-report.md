@@ -20,3 +20,11 @@
 - `pnpm vitest run tests/main/change-planner.test.ts`: 1 file, 5 tests passed.
 - `pnpm tsc --noEmit`: passed.
 - `git diff --check`: passed.
+
+## Review remediation
+
+- Apply and restore now reject symbolic-link/reparse-point managed roots and path ancestors before every managed write. Existing parents are also real-path checked against the managed root.
+- The backup manifest is created before the first operation and re-written after each operation is prepared, so a partial failure retains enough recovery state for `restorePlan`.
+- Delete previews deduplicate overlapping paths, and repeated restore calls remain safe.
+- Repair previews now reject an existing isolated target instead of allowing a later overwrite.
+- Added focused regression coverage for junction replacement before apply and restore, partial repair failure recovery, overlapping deletes, and existing repair targets.

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -94,5 +94,80 @@ describe('reversible maintenance plans', () => {
     expect(safe.autoApplyEligible).toBe(true);
     await applyPlan(safe, true);
     await expect(readFile(join(managedRoot, 'SKILL.md'), 'utf8')).resolves.toBe('new');
+  });
+
+  it('rejects a repair preview whose isolated managed target already exists', async () => {
+    const root = await createTemporaryDirectory();
+    const source = join(root, 'source-skill');
+    const managedRoot = join(root, 'managed');
+    await mkdir(source);
+    await mkdir(join(managedRoot, 'source-skill'), { recursive: true });
+    await writeFile(join(source, 'SKILL.md'), 'new', 'utf8');
+
+    await expect(planRepair({ sourcePath: source, managedRoot })).rejects.toThrow('already exists');
+  });
+
+  it('deduplicates overlapping delete targets and restores idempotently', async () => {
+    const root = await createTemporaryDirectory();
+    const managedRoot = join(root, 'managed');
+    await mkdir(join(managedRoot, 'obsolete'), { recursive: true });
+    await writeFile(join(managedRoot, 'obsolete', 'SKILL.md'), 'old', 'utf8');
+
+    const plan = await planDelete({ managedRoot, paths: ['obsolete', join('obsolete', 'SKILL.md')] });
+
+    expect(plan.operations).toEqual([{ kind: 'delete', path: join('obsolete', 'SKILL.md') }]);
+    await applyPlan(plan, true);
+    await restorePlan(plan);
+    await restorePlan(plan);
+    await expect(readFile(join(managedRoot, 'obsolete', 'SKILL.md'), 'utf8')).resolves.toBe('old');
+  });
+
+  it('writes a recoverable manifest before a later repair operation fails', async () => {
+    const root = await createTemporaryDirectory();
+    const source = join(root, 'source-skill');
+    const managedRoot = join(root, 'managed');
+    await mkdir(source);
+    await writeFile(join(source, 'a.md'), 'first', 'utf8');
+    await writeFile(join(source, 'b.md'), 'second', 'utf8');
+    const plan = await planRepair({ sourcePath: source, managedRoot });
+    await rm(join(source, 'b.md'));
+
+    await expect(applyPlan(plan, true)).rejects.toThrow();
+    await expect(readFile(plan.backup.manifestPath, 'utf8')).resolves.toContain('a.md');
+    await restorePlan(plan);
+    await expect(readFile(join(managedRoot, 'source-skill', 'a.md'), 'utf8')).rejects.toThrow();
+  });
+
+  it('rejects a managed parent replaced with a junction before apply or restore', async () => {
+    const root = await createTemporaryDirectory();
+    const managedRoot = join(root, 'managed');
+    const outside = join(root, 'outside');
+    await mkdir(join(managedRoot, 'nested'), { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(managedRoot, 'nested', 'SKILL.md'), 'managed', 'utf8');
+    await writeFile(join(outside, 'SKILL.md'), 'outside', 'utf8');
+    const plan = await planDelete({ managedRoot, paths: ['nested'] });
+    await rm(join(managedRoot, 'nested'), { recursive: true });
+    await symlink(outside, join(managedRoot, 'nested'), 'junction');
+
+    await expect(applyPlan(plan, true)).rejects.toThrow('reparse');
+    await expect(readFile(join(outside, 'SKILL.md'), 'utf8')).resolves.toBe('outside');
+  });
+
+  it('rejects a managed parent replaced with a junction before restore', async () => {
+    const root = await createTemporaryDirectory();
+    const managedRoot = join(root, 'managed');
+    const outside = join(root, 'outside');
+    await mkdir(join(managedRoot, 'nested'), { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(managedRoot, 'nested', 'SKILL.md'), 'managed', 'utf8');
+    await writeFile(join(outside, 'SKILL.md'), 'outside', 'utf8');
+    const plan = await planDelete({ managedRoot, paths: ['nested'] });
+    await applyPlan(plan, true);
+    await rm(join(managedRoot, 'nested'), { recursive: true });
+    await symlink(outside, join(managedRoot, 'nested'), 'junction');
+
+    await expect(restorePlan(plan)).rejects.toThrow('reparse');
+    await expect(readFile(join(outside, 'SKILL.md'), 'utf8')).resolves.toBe('outside');
   });
 });
