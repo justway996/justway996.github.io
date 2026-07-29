@@ -59,7 +59,7 @@ async function findSkillFiles(directory: string): Promise<string[]> {
 
   const nested = await Promise.all(entries.map(async (entry) => {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) return findSkillFiles(path);
+    if (entry.isDirectory() && !entry.isSymbolicLink()) return findSkillFiles(path);
     return entry.isFile() && entry.name === 'SKILL.md' ? [path] : [];
   }));
 
@@ -95,12 +95,34 @@ function parseFrontMatter(content: string): Record<string, string> | null {
 
   const metadata: Record<string, string> = {};
   for (const line of match[1].split(/\r?\n/)) {
-    const separator = line.indexOf(':');
-    if (separator <= 0) continue;
-    const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim();
-    if (key && value) metadata[key] = value.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, '$1$2');
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const field = trimmed.match(/^([A-Za-z][A-Za-z0-9_-]*):[ \t]+(.+)$/);
+    if (!field) return null;
+
+    const value = parseScalar(field[2]);
+    if (value === null || metadata[field[1]]) return null;
+    metadata[field[1]] = value;
   }
 
   return metadata;
+}
+
+function parseScalar(value: string): string | null {
+  if (value.startsWith('"')) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === 'string' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (value.startsWith("'")) {
+    if (!value.endsWith("'") || value.length < 2) return null;
+    return value.slice(1, -1).replace(/''/g, "'");
+  }
+
+  return /^[^\[\]{}&,*!|>@`]+$/.test(value) ? value : null;
 }

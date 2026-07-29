@@ -51,7 +51,7 @@ describe('local Codex skill scanner', () => {
 
   it('ignores SKILL.md files with malformed front matter', async () => {
     const tempDir = await createTempDirectory();
-    await writeSkill(tempDir, '.codex/skills/broken/SKILL.md', 'name: broken\ndescription: No delimiters\n');
+    await writeSkill(tempDir, '.codex/skills/broken/SKILL.md', '---\nname: [unterminated\ndescription: Broken metadata\n---\n');
 
     await expect(scanSkills({ globalRoot: tempDir })).resolves.toEqual([]);
   });
@@ -62,5 +62,23 @@ describe('local Codex skill scanner', () => {
     await writeSkill(tempDir, 'workspace/.codex/skills/ppt/SKILL.md', '---\nname: ppt\ndescription: Local slides\n---');
     const records = await scanSkills({ globalRoot: tempDir, workspaceRoot: join(tempDir, 'workspace') });
     expect(resolveEffectiveSkills(records).find((item) => item.id === 'ppt')?.source).toBe('workspace');
+  });
+
+  it('uses workspace, managed, plugin, and global precedence in that order', async () => {
+    const tempDir = await createTempDirectory();
+    const workspaceRoot = join(tempDir, 'workspace');
+    const managedRoot = join(tempDir, 'managed');
+    await writeSkill(tempDir, '.codex/skills/global-plugin/SKILL.md', '---\nname: global-plugin\ndescription: Global\n---');
+    await writeSkill(tempDir, '.codex/plugins/global-plugin/SKILL.md', '---\nname: global-plugin\ndescription: Plugin\n---');
+    await writeSkill(tempDir, '.codex/plugins/plugin-managed/SKILL.md', '---\nname: plugin-managed\ndescription: Plugin\n---');
+    await writeSkill(managedRoot, 'plugin-managed/SKILL.md', '---\nname: plugin-managed\ndescription: Managed\n---');
+    await writeSkill(managedRoot, 'managed-workspace/SKILL.md', '---\nname: managed-workspace\ndescription: Managed\n---');
+    await writeSkill(workspaceRoot, '.codex/skills/managed-workspace/SKILL.md', '---\nname: managed-workspace\ndescription: Workspace\n---');
+
+    const effective = resolveEffectiveSkills(await scanSkills({ globalRoot: tempDir, managedRoot, workspaceRoot }));
+
+    expect(effective.find((item) => item.id === 'global-plugin')?.source).toBe('plugin');
+    expect(effective.find((item) => item.id === 'plugin-managed')?.source).toBe('managed');
+    expect(effective.find((item) => item.id === 'managed-workspace')?.source).toBe('workspace');
   });
 });
