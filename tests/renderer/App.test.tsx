@@ -61,6 +61,26 @@ describe('Toolbox application', () => {
     }
   });
 
+  it('marks page navigation with direction and a reduced-motion-safe root contract', async () => {
+    const api = createApi({
+      workflowId: proposalWorkflow.id,
+      title: proposalWorkflow.name,
+      status: 'ready',
+      reason: '所需工具已就绪。',
+    });
+
+    const { container } = render(<App api={api} />);
+    const appShell = container.querySelector('.app-shell');
+
+    expect(appShell).toHaveAttribute('data-motion-safe', 'true');
+
+    await userEvent.click(screen.getByRole('button', { name: '发现' }));
+    expect(container.querySelector('.page-transition')).toHaveClass('page-transition--forward');
+
+    await userEvent.click(screen.getByRole('button', { name: '总览' }));
+    expect(container.querySelector('.page-transition')).toHaveClass('page-transition--backward');
+  });
+
   it('shows a business recommendation instead of raw Skills for a PPT search', async () => {
     const api = createApi({
       workflowId: proposalWorkflow.id,

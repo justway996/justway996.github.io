@@ -29,6 +29,8 @@ const pageTitles: Record<PageId, string> = {
   maintenance: '维护中心',
 };
 
+const pageOrder: PageId[] = ['dashboard', 'discover', 'workflows', 'tools', 'maintenance'];
+
 const demoSkills: SkillRecord[] = propDesignerTools.map((tool, index) => ({
   id: tool.id,
   name: tool.title,
@@ -86,6 +88,7 @@ export function App({ api }: AppProps) {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [plan, setPlan] = useState<MaintenancePlan>();
+  const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -169,9 +172,17 @@ export function App({ api }: AppProps) {
     }
   }, [toolboxApi]);
 
+  const navigate = useCallback((nextPage: PageId) => {
+    if (nextPage === activePage) return;
+    setTransitionDirection(
+      pageOrder.indexOf(nextPage) > pageOrder.indexOf(activePage) ? 'forward' : 'backward',
+    );
+    setActivePage(nextPage);
+  }, [activePage]);
+
   return (
-    <div className="app-shell">
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+    <div className="app-shell" data-motion-safe="true">
+      <Sidebar activePage={activePage} onNavigate={navigate} />
       <main className="app-main">
         <div className="topbar">
           <div className="topbar__breadcrumb"><span>TOOLBOX</span><i>/</i><strong>{pageTitles[activePage]}</strong></div>
@@ -193,30 +204,35 @@ export function App({ api }: AppProps) {
 
         {loading && <div className="loading-line" aria-label="正在读取工作台状态"><span /></div>}
 
-        {activePage === 'dashboard' && (
-          <DashboardPage
-            recommendations={recommendations}
-            searching={searching}
-            skillCount={skills.length}
-            workflowCount={workflows.length}
-            error={error}
-            onSearch={search}
-            onRepair={previewRepair}
-          />
-        )}
-        {activePage === 'discover' && (
-          <DiscoverPage
-            recommendations={recommendations}
-            searching={searching}
-            onSearch={search}
-            onRepair={previewRepair}
-          />
-        )}
-        {activePage === 'workflows' && (
-          <WorkflowsPage workflows={workflows} onImport={importWorkflow} onExport={exportWorkflow} />
-        )}
-        {activePage === 'tools' && <MyToolsPage skills={skills} onScan={refresh} />}
-        {activePage === 'maintenance' && <MaintenancePage skills={skills} onScan={refresh} />}
+        <div
+          className={`page-transition page-transition--${transitionDirection}`}
+          key={activePage}
+        >
+          {activePage === 'dashboard' && (
+            <DashboardPage
+              recommendations={recommendations}
+              searching={searching}
+              skillCount={skills.length}
+              workflowCount={workflows.length}
+              error={error}
+              onSearch={search}
+              onRepair={previewRepair}
+            />
+          )}
+          {activePage === 'discover' && (
+            <DiscoverPage
+              recommendations={recommendations}
+              searching={searching}
+              onSearch={search}
+              onRepair={previewRepair}
+            />
+          )}
+          {activePage === 'workflows' && (
+            <WorkflowsPage workflows={workflows} onImport={importWorkflow} onExport={exportWorkflow} />
+          )}
+          {activePage === 'tools' && <MyToolsPage skills={skills} onScan={refresh} />}
+          {activePage === 'maintenance' && <MaintenancePage skills={skills} onScan={refresh} />}
+        </div>
       </main>
 
       {plan && <PlanDialog plan={plan} onCancel={() => setPlan(undefined)} onConfirm={applyRepair} />}
