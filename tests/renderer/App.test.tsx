@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/renderer/App';
@@ -27,7 +27,11 @@ const proposalWorkflow: WorkflowDefinition = {
   ],
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 function createApi(
   recommendation: WorkflowRecommendation,
@@ -44,7 +48,101 @@ function createApi(
   };
 }
 
+function enterPortalPage(label: '总览' | '发现' | '工作流' | '我的工具' | '维护中心') {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+    matches: true,
+    media: '(prefers-reduced-motion: reduce)',
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  fireEvent.click(screen.getByRole('button', { name: label }));
+}
+
 describe('Toolbox application', () => {
+  it('shows five named portal controls and opens the selected business page', async () => {
+    vi.useFakeTimers();
+    const api = createApi({
+      workflowId: proposalWorkflow.id,
+      title: proposalWorkflow.name,
+      status: 'ready',
+      reason: '所需工具已就绪。',
+    });
+
+    render(<App api={api} />);
+
+    const portal = screen.getByRole('navigation', { name: '工具箱入口' });
+    const controls = within(portal).getAllByRole('button');
+
+    expect(controls).toHaveLength(5);
+    expect(controls.map((control) => control.getAttribute('aria-label'))).toEqual([
+      '总览',
+      '发现',
+      '工作流',
+      '我的工具',
+      '维护中心',
+    ]);
+
+    fireEvent.click(within(portal).getByRole('button', { name: '工作流' }));
+    act(() => vi.advanceTimersByTime(820));
+
+    expect(screen.getByRole('heading', { name: '工作流', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '主要功能' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '工具箱入口' })).not.toBeInTheDocument();
+  });
+
+  it('turns the selected portal door like a page before opening its target', async () => {
+    vi.useFakeTimers();
+    const api = createApi({
+      workflowId: proposalWorkflow.id,
+      title: proposalWorkflow.name,
+      status: 'ready',
+      reason: '所需工具已就绪。',
+    });
+
+    render(<App api={api} />);
+
+    const portal = screen.getByRole('navigation', { name: '工具箱入口' });
+    const workflowDoor = within(portal).getByRole('button', { name: '工作流' });
+    fireEvent.click(workflowDoor);
+
+    expect(screen.getByRole('main')).toHaveClass('home-portal--turning');
+    expect(workflowDoor).toHaveClass('portal-door--turning');
+    expect(screen.queryByRole('heading', { name: '工作流', level: 1 })).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(820));
+
+    expect(screen.getByRole('heading', { name: '工作流', level: 1 })).toBeInTheDocument();
+  });
+
+  it('opens the selected portal target immediately when reduced motion is preferred', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: true,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const api = createApi({
+      workflowId: proposalWorkflow.id,
+      title: proposalWorkflow.name,
+      status: 'ready',
+      reason: '所需工具已就绪。',
+    });
+
+    render(<App api={api} />);
+    fireEvent.click(screen.getByRole('button', { name: '工作流' }));
+
+    expect(screen.getByRole('heading', { name: '工作流', level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '工具箱入口' })).not.toBeInTheDocument();
+  });
+
   it('shows the five business navigation categories', () => {
     const api = createApi({
       workflowId: proposalWorkflow.id,
@@ -54,6 +152,7 @@ describe('Toolbox application', () => {
     });
 
     render(<App api={api} />);
+    enterPortalPage('总览');
 
     expect(screen.getByRole('navigation', { name: '主要功能' })).toBeInTheDocument();
     for (const label of ['总览', '发现', '工作流', '我的工具', '维护中心']) {
@@ -70,6 +169,7 @@ describe('Toolbox application', () => {
     });
 
     const { container } = render(<App api={api} />);
+    enterPortalPage('总览');
     const appShell = container.querySelector('.app-shell');
 
     expect(appShell).toHaveAttribute('data-motion-safe', 'true');
@@ -90,6 +190,7 @@ describe('Toolbox application', () => {
     });
 
     render(<App api={api} />);
+    enterPortalPage('总览');
     await userEvent.type(screen.getByRole('searchbox'), '做 PPT');
     await userEvent.click(screen.getByRole('button', { name: '查找方案' }));
 
@@ -125,6 +226,7 @@ describe('Toolbox application', () => {
     }, plan);
 
     render(<App api={api} />);
+    enterPortalPage('总览');
     await userEvent.type(screen.getByRole('searchbox'), '做 PPT');
     await userEvent.click(screen.getByRole('button', { name: '查找方案' }));
     await userEvent.click(await screen.findByRole('button', { name: '修复此工具' }));

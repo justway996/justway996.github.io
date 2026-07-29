@@ -8,6 +8,7 @@ import type {
   WorkflowRecommendation,
 } from '../shared/models';
 import { PlanDialog } from './components/PlanDialog';
+import { HomePortal } from './components/HomePortal';
 import { Sidebar, type PageId } from './components/Sidebar';
 import { DashboardPage } from './pages/DashboardPage';
 import { DiscoverPage } from './pages/DiscoverPage';
@@ -79,6 +80,8 @@ export type AppProps = {
 
 export function App({ api }: AppProps) {
   const toolboxApi = useMemo(() => api ?? window.toolbox ?? demoApi, [api]);
+  const [isHome, setIsHome] = useState(true);
+  const [portalTarget, setPortalTarget] = useState<PageId>();
   const [activePage, setActivePage] = useState<PageId>('dashboard');
   const [skills, setSkills] = useState<SkillRecord[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
@@ -110,6 +113,17 @@ export function App({ api }: AppProps) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!portalTarget) return undefined;
+
+    const transitionTimer = window.setTimeout(() => {
+      setIsHome(false);
+      setPortalTarget(undefined);
+    }, 820);
+
+    return () => window.clearTimeout(transitionTimer);
+  }, [portalTarget]);
 
   const search = useCallback(async (query: string) => {
     setSearching(true);
@@ -173,12 +187,30 @@ export function App({ api }: AppProps) {
   }, [toolboxApi]);
 
   const navigate = useCallback((nextPage: PageId) => {
+    if (isHome) {
+      setActivePage(nextPage);
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        setIsHome(false);
+      } else {
+        setPortalTarget(nextPage);
+      }
+      return;
+    }
     if (nextPage === activePage) return;
     setTransitionDirection(
       pageOrder.indexOf(nextPage) > pageOrder.indexOf(activePage) ? 'forward' : 'backward',
     );
     setActivePage(nextPage);
-  }, [activePage]);
+  }, [activePage, isHome]);
+
+  if (isHome) {
+    return (
+      <HomePortal
+        onNavigate={navigate}
+        turningPage={portalTarget}
+      />
+    );
+  }
 
   return (
     <div className="app-shell" data-motion-safe="true">
