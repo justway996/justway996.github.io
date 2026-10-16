@@ -4,7 +4,7 @@ Status: in progress. This is a local-verification release, not an accepted full 
 
 Implemented: explicit source roots, SQLite/WAL backup, AES-GCM volumes, DPAPI/local and offline recovery keys, isolated restoration, readable chats, link/path reports, Chinese GUI/CLI, opt-in Windows scheduling code, and the official Quark CLI protocol adapter.
 
-Validation: 54 unittest executions passed on Windows Python 3.12; packaged exe help/GUI smoke passed before the latest rebuild. Representative real files were encrypted/restored and chat messages exported. The real cloud account, clean Windows migration, project startup and long-running scheduling are not yet accepted. Unit tests use a LocalDrive fake only for transport contracts.
+Validation: 58 unittest executions passed on Windows Python 3.12; packaged exe help/GUI smoke passed before the latest rebuild. Representative real files were encrypted/restored and chat messages exported. The real cloud account, clean Windows migration, project startup and long-running scheduling are not yet accepted. Unit tests use a LocalDrive fake only for transport contracts.
 
 Next work:
 

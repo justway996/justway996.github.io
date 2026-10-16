@@ -48,6 +48,10 @@ def seal(staging: Path, outbox: Path, recovery_key: bytes, *, part_size=PART_SIZ
         file = staging / item['path']
         if not file.resolve().is_relative_to(staging) or file.stat().st_size != item['size'] or sha256(file) != item['sha256']:
             raise ValueError('Staging does not match manifest')
+        if item['size'] in {32, 64, 65, 66}:
+            content = file.read_bytes()
+            if content == recovery_key or content.strip() == recovery_key.hex().encode('ascii'):
+                raise ValueError('Recovery key is inside selected source scope; move it offline before backing up')
     outbox.mkdir(parents=True, exist_ok=True)
     sid = uuid.uuid4().hex
     with tempfile.TemporaryDirectory(prefix='.packing-', dir=outbox) as temp_name:

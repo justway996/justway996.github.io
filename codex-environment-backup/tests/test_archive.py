@@ -64,3 +64,10 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.snapshot()
         self.assertFalse(list((self.base / 'out').glob('*/COMPLETE.json')))
+
+    def test_recovery_key_in_source_is_blocked_even_after_scope_changes(self):
+        self.file.write_text(self.key.hex() + '\n', encoding='ascii')
+        self.manifest['files'][0].update(size=self.file.stat().st_size, sha256=sha256(self.file))
+        (self.stage / 'manifest.json').write_text(json.dumps(self.manifest), encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Recovery key'):
+            self.snapshot()

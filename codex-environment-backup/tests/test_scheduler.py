@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import sqlite3
 from unittest.mock import patch
 
 from codex_backup.scheduler import run_once, lock, schedule_xml
@@ -99,3 +100,16 @@ class SchedulerTests(unittest.TestCase):
         second = run_once(self.config)
         self.assertFalse(second['unchanged'])
         self.assertNotEqual(first['snapshot_id'], second['snapshot_id'])
+
+    def test_sqlite_maintenance_only_does_not_create_a_version(self):
+        db = sqlite3.connect(self.base / 'source/state.sqlite')
+        self.addCleanup(db.close)
+        db.execute('create table work(id integer primary key, body text)')
+        db.execute("insert into work values(1,'ongoing')")
+        db.commit()
+        new_key(self.base / 'data', self.base / 'offline.key')
+        first = run_once(self.config)
+        db.execute('vacuum')
+        second = run_once(self.config)
+        self.assertTrue(second['unchanged'])
+        self.assertEqual(first['snapshot_id'], second['snapshot_id'])
