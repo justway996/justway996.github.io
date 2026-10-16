@@ -1,0 +1,5 @@
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.0
+# Build tool used for this Windows release:
+pyinstaller==6.22.3
