@@ -254,6 +254,7 @@ def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
             expected = {item['path'] for item in manifest['files']}
             if len(expected) != len(manifest['files']):
                 raise ValueError('Duplicate manifest path')
+            allowed = expected | {'manifest.json'}
             seen = set()
             for info in zf.infolist():
                 path = safe_member(info.filename)
@@ -267,7 +268,7 @@ def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
                 if str(path) != 'manifest.json' and (len(path.parts) < 2 or path.parts[0] != 'roots' or path.parts[1] not in root_ids):
                     if not (info.is_dir() and str(path) == 'roots'):
                         raise ValueError('Unexpected archive root')
-                if not info.is_dir() and str(path) not in expected | {'manifest.json'}:
+                if not info.is_dir() and str(path) not in allowed:
                     raise ValueError('Unlisted archive content')
             directory_links = manifest.get('directory_links', [])
             validate_directory_links(directory_links, root_ids, zf.infolist())

@@ -1,6 +1,6 @@
 # Continue development
 
-Status: in progress. Version 0.2.1 has passed 91 Windows unittest executions, a representative Quark round trip, a default 32 MiB multi-volume round trip and a real interrupted/resumed publication. Full environment migration is not yet accepted.
+Status: in progress. Version 0.2.2 has passed 91 Windows unittest executions, a representative Quark round trip, a default 32 MiB multi-volume round trip and a real interrupted/resumed publication. Full environment migration is not yet accepted.
 
 Implemented: explicit source roots, SQLite/WAL backup, AES-GCM volumes, DPAPI/local and offline recovery keys, isolated restoration, readable chats, link/path reports, Chinese GUI/CLI, opt-in Windows scheduling code, and the official Quark CLI protocol adapter. Long Windows paths and pre-1980 timestamps are covered. Internal captured junctions and supported Git worktrees are reconstructed in the restored copy. Their manifest uses v2 (minimum reader 0.2.0); new readers still accept v1. PROJECTS.md/json records declarations, dependency/lockfile evidence and handoff hashes without running commands. Codex project lockfiles are preserved; only identified transient process locks are excluded and reported.
 
@@ -13,6 +13,8 @@ Next work:
 3. Run a clean Windows/new Codex session restoration and project validation. Preserve original user instructions, project cards and rule stages; do not activate every restored automation.
 
 The current machine's metadata-only inventory found about 26.5 GiB before exclusions, including old account-recovery duplicates and dependency links. This is an inventory, not an uploaded full backup. Keep backup outputs/recovery keys outside selected source roots; preserve required source and assets while classifying rebuildable dependencies explicitly.
+
+A metadata validation benchmark (`python benchmarks/restore_metadata.py`) covers scaling on large file lists without extracting files. Allowed archive names are computed once per restore; path safety checks remain unchanged.
 
 Development: install the project, set PYTHONPATH=src, then run `python -m unittest discover -s tests -v`. `python -m codex_backup gui-smoke` checks widget construction. Build with packaging/build.ps1; current pinned dependency versions are in requirements-lock.txt.
 
