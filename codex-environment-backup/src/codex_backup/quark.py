@@ -3,6 +3,7 @@ import json
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import tempfile
 
 
 def parse_output(stdout: str, returncode: int):
@@ -49,7 +50,10 @@ class QuarkClient:
 
     def run(self, *args):
         runtime = self.linux_path(self.workdir)
-        p = self.wsl('env', f'OPENCLAW_RUNTIME_DIR={runtime}', 'node', self.script, *args, timeout=3600)
+        installation = str(PurePosixPath(self.script).parent.parent)
+        if self.wsl('test', '-w', installation).returncode != 1:
+            raise RuntimeError('Use a read-only official CLI installation with a dedicated WSL user')
+        p = self.wsl('env', f'--chdir={runtime}', f'HOME={runtime}', 'CODEX_ENV=1', 'node', self.script, *args, timeout=3600)
         result, records = parse_output(p.stdout.decode('utf-8', errors='replace'), p.returncode)
         if result.get('notice', {}).get('text'):
             self.notices.append(result['notice']['text'])
@@ -96,13 +100,17 @@ class QuarkClient:
         return dict(fid=fids[0])
 
     def download(self, fid, destination):
-        result, records = self.run('read-file', '--fid', fid)
-        files = result['data'].get('files', [])
-        if len(files) != 1 or not files[0].get('success'):
-            raise RuntimeError('Incomplete download')
-        local = PurePosixPath(files[0]['filePath'])
-        runtime = PurePosixPath(self.linux_path(self.workdir)) / '.quarkclouddrive'
-        if '..' in local.parts or not local.is_relative_to(runtime):
-            raise RuntimeError('Unexpected download output location')
-        shutil.copyfile(self.windows_path(str(local)), destination)
+        with tempfile.TemporaryDirectory(prefix='.download-', dir=self.workdir) as temp:
+            runtime = PurePosixPath(self.linux_path(temp))
+            result, records = self.run('download', '--fid', fid, '--output-dir', str(runtime))
+            path = result['data'].get('filePath')
+            if not path:
+                raise RuntimeError('Incomplete download')
+            local = PurePosixPath(path)
+            if not local.is_absolute() or '..' in local.parts or not local.is_relative_to(runtime):
+                raise RuntimeError('Unexpected download output location')
+            source = self.windows_path(str(local)).resolve()
+            if not source.is_relative_to(Path(temp).resolve()):
+                raise RuntimeError('Unexpected download output location')
+            shutil.copyfile(source, destination)
         return Path(destination)

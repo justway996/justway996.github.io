@@ -131,6 +131,10 @@ def collect(config: dict, staging: Path) -> dict:
             parent = Path(parent)
             for name in list(dirs):
                 child = parent / name
+                if root['kind'] == 'codex' and child.relative_to(source).as_posix() == 'browser':
+                    dirs.remove(name)
+                    coverage.append(dict(root=root['id'], path='browser', state='reauthorize', reason='Browser login profile excluded'))
+                    continue
                 excluded = child.relative_to(source).as_posix() in root.get('exclude', [])
                 if linked(child) or name in transient or excluded:
                     dirs.remove(name)

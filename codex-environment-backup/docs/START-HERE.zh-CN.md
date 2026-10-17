@@ -13,13 +13,13 @@
 
 原 Codex 聊天保存为原始材料和 chats 中的可读导出；不承诺出现在新账号侧栏。原始账号 auth.json、浏览器资料和网盘令牌不迁移。
 
-## 夸克接入（尚需实机验证）
+## 夸克接入
 
 官方仓库当前注明 Windows 需要 WSL。先按微软/夸克官方指引配置 WSL 与官方 CLI，在官方页面完成 OAuth；不要把授权码和令牌贴到聊天或写进本程序配置。
 
 cloud 配置包括 WSL 发行版 distribution、WSL 内官方 `quark-drive.cjs` 的绝对路径 script、目标云端绝对路径 path。目标目录须已存在且用户有权访问。先 cloud-check，再对独立探针目录做上传/下载哈希核对；通过后才将 cloud.enabled 设为 true，随后 backup 会尝试上传并回读校验。
 
-适配器按官方 NDJSON 与完整 Artifact 工作；若工具版本改变、权限/额度不足或需要登录，会停止并保留本地版本。当前尚未完成真实账号测试；本地传输模拟测试不是云端完成证据。
+适配器按官方 NDJSON 与完整 Artifact 工作；若工具版本改变、权限/额度不足或需要登录，会停止并保留本地版本。代表样本已完成真实账号上传、发现、下载与恢复；这不等于全部环境或新电脑验收。已验证版本和授权隔离要求见 [夸克安装与接续](QUARK-SETUP.zh-CN.md)。
 
 ## 定时任务
 
@@ -27,4 +27,4 @@ cloud 配置包括 WSL 发行版 distribution、WSL 内官方 `quark-drive.cjs` 
 
 ## 继续开发工具本身
 
-源码在发行包 source/。先读 README 和 docs/progress.md，运行测试；优先完成真实夸克接入和干净 Windows 恢复演练。依赖/缺项如实报告，不把本地验证版描述成全环境迁移已验收。
+源码在发行包 source/。先读 README 和 CONTINUE.md，运行测试；继续完整范围、定时和干净 Windows 恢复演练。依赖/缺项如实报告，不把样本验证描述成全环境迁移已验收。

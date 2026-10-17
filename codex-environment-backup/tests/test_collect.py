@@ -73,6 +73,19 @@ class CollectTests(unittest.TestCase):
         result = collect(cfg, self.base / 'stage')
         self.assertFalse(result['complete'])
 
+    def test_codex_browser_login_profile_excluded_but_project_browser_assets_preserved(self):
+        profile = self.source / 'browser' / 'profile'
+        profile.mkdir(parents=True)
+        (profile / 'Cookies').write_bytes(b'private browser session')
+        cfg = load_config(self.cfgpath)
+        cfg['roots'][0]['kind'] = 'codex'
+        result = collect(cfg, self.base / 'codex-stage')
+        self.assertNotIn('roots/p/browser/profile/Cookies', {x['path'] for x in result['files']})
+        self.assertTrue(any(x.get('path') == 'browser' and x['state'] == 'reauthorize' for x in result['coverage']))
+        cfg['roots'][0]['kind'] = 'project'
+        result = collect(cfg, self.base / 'project-stage')
+        self.assertIn('roots/p/browser/profile/Cookies', {x['path'] for x in result['files']})
+
     def test_readonly_sqlite_uses_stable_wal_copy_when_api_cannot_open_source(self):
         dbpath = self.source / 'chat.sqlite'
         db = sqlite3.connect(dbpath)
