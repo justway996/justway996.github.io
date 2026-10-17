@@ -39,6 +39,15 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_snapshot(self.snapshot(), os.urandom(32))
 
+    def test_manifest_v2_is_supported_and_future_versions_are_rejected(self):
+        self.manifest['format_version'] = 2
+        (self.stage / 'manifest.json').write_text(json.dumps(self.manifest), encoding='utf-8')
+        self.assertEqual(verify_snapshot(self.snapshot(), self.key)['format_version'], 2)
+        self.manifest['format_version'] = 999
+        (self.stage / 'manifest.json').write_text(json.dumps(self.manifest), encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Unsupported manifest'):
+            self.snapshot()
+
     def test_corruption_missing_part_and_envelope_tamper(self):
         for kind in ['corrupt', 'missing', 'envelope', 'marker']:
             with self.subTest(kind=kind):

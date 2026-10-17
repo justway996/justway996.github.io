@@ -8,6 +8,36 @@ from codex_backup.quark import QuarkClient, parse_output
 
 
 class QuarkTests(unittest.TestCase):
+    def test_existing_version_folder_is_reused_without_create_command(self):
+        Path('.test-work').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir='.test-work') as temp:
+            client = QuarkClient({'distribution': 'CodexBackup', 'script': '/opt/quark/scripts/quark-drive.cjs'}, Path(temp))
+            with patch.object(client, 'list_children', return_value=[dict(file_name='version', dir=True, fid='existing')]), \
+                    patch.object(client, 'run', return_value=({'data': {'fid': 'replacement'}}, [])) as run:
+                self.assertEqual(client.create_folder('version', 'parent'), 'existing')
+                run.assert_not_called()
+
+    def test_conflicting_or_ambiguous_version_folder_is_rejected(self):
+        Path('.test-work').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir='.test-work') as temp:
+            client = QuarkClient({'distribution': 'CodexBackup', 'script': '/opt/quark/scripts/quark-drive.cjs'}, Path(temp))
+            for items in [[dict(file_name='version', dir=False, fid='file')],
+                          [dict(file_name='version', dir=True, fid='one'), dict(file_name='version', dir=True, fid='two')]]:
+                with self.subTest(items=items), patch.object(client, 'list_children', return_value=items), \
+                        patch.object(client, 'run', return_value=({'data': {'fid': 'replacement'}}, [])) as run:
+                    with self.assertRaisesRegex(ValueError, 'ambiguous|conflict'):
+                        client.create_folder('version', 'parent')
+                    run.assert_not_called()
+
+    def test_missing_version_folder_is_created(self):
+        Path('.test-work').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir='.test-work') as temp:
+            client = QuarkClient({'distribution': 'CodexBackup', 'script': '/opt/quark/scripts/quark-drive.cjs'}, Path(temp))
+            with patch.object(client, 'list_children', return_value=[]), \
+                    patch.object(client, 'run', return_value=({'data': {'fid': 'created'}}, [])) as run:
+                self.assertEqual(client.create_folder('version', 'parent'), 'created')
+                run.assert_called_once_with('create-folder', '--dir-path', 'version', '--parent-fid', 'parent')
+
     def test_partial_failure_is_failure_even_with_zero_exit(self):
         lines = [dict(type='list', code=0, data={'fileId': 'one'}),
                  dict(type='result', code=31003, data={'successCount': 1, 'failedCount': 1})]

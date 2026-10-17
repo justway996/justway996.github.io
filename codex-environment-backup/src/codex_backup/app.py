@@ -91,7 +91,7 @@ def gui(smoke=False):
     from tkinter import ttk, filedialog, messagebox, simpledialog
     import threading
     window = tk.Tk()
-    window.title('Codex 工作环境备份 · 0.1 本地验证版')
+    window.title('Codex 工作环境备份 · 0.2 迁移验证版')
     window.geometry('900x620')
     selected = tk.StringVar()
     ttk.Label(window, text='完整备份与恢复', font=('Microsoft YaHei UI', 19)).pack(anchor='w', padx=20, pady=(18, 4))
@@ -172,7 +172,10 @@ def gui(smoke=False):
         except Exception as exc:
             messagebox.showerror('设置失败', str(exc))
     def install():
-        if messagebox.askyesno('启用本机定时备份', '每 30 分钟检查，需当前用户保持登录。确认范围和恢复密钥均已设置？'):
+        if not selected.get():
+            return messagebox.showinfo('需要配置', '请先打开配置')
+        interval = load_config(Path(selected.get())).get('schedule', {}).get('interval_minutes', 30)
+        if messagebox.askyesno('启用本机定时备份', f'每 {interval} 分钟检查，需当前用户保持登录。确认范围和恢复密钥均已设置？'):
             perform('install-schedule')
     buttons = [('新建配置', setup), ('打开配置', choose), ('创建恢复密钥', key), ('导入密钥', lambda: key(True)),
                ('检查范围', lambda: perform('inspect')), ('立即备份', lambda: perform('backup')),

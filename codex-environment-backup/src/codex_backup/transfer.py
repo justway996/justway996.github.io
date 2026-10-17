@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import tempfile
 
-from .collect import sha256
+from .collect import sha256, utcnow
 
 
 def remote_files(client, fid):
@@ -56,7 +56,35 @@ def publish(snapshot: Path, client, remote_root_fid: str) -> dict:
             copy = client.download(remote, Path(temp) / local.name)
             if copy.stat().st_size != expected_size or sha256(copy) != expected_hash:
                 raise ValueError('Remote bytes differ; no complete version published')
-    return dict(state='cloud_verified', snapshot_id=sid, fid=fid)
+    return dict(state='cloud_verified', snapshot_id=sid, fid=fid, verified_at=utcnow(),
+        envelope_sha256=sha256(snapshot / 'envelope.json'))
+
+
+def receipt_metadata_matches(snapshot, client, remote_root_fid, receipt):
+    """Confirm a previous byte verification still has its remote metadata.
+
+    This is not a fresh download/hash check of volume bytes. Opaque FIDs are
+    deliberately not compared: the official SDK can change them between lists.
+    """
+    envelope = checked_envelope(snapshot)
+    if receipt.get('state') != 'cloud_verified' or not receipt.get('verified_at') or receipt.get('envelope_sha256') != sha256(snapshot / 'envelope.json'):
+        return False
+    folders = [item for item in client.list_children(remote_root_fid) if item['file_name'] == envelope['snapshot_id']]
+    if len(folders) > 1:
+        raise ValueError('Ambiguous same-name cloud version')
+    if not folders or not folders[0]['dir']:
+        return False
+    entries = remote_files(client, folders[0]['fid'])
+    required = [(part['name'], part['size']) for part in envelope['parts']]
+    required += [(name, (snapshot / name).stat().st_size) for name in ['envelope.json', 'COMPLETE.json']]
+    if any(name not in entries or entries[name]['dir'] or entries[name].get('size') != size for name, size in required):
+        return False
+    with tempfile.TemporaryDirectory(prefix='.receipt-check-', dir=snapshot.parent) as temp:
+        for name in ['envelope.json', 'COMPLETE.json']:
+            remote = client.download(entries[name]['fid'], Path(temp) / name)
+            if sha256(remote) != sha256(snapshot / name):
+                return False
+    return True
 
 
 def list_snapshots(client, remote_root_fid: str) -> list[dict]:

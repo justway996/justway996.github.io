@@ -6,6 +6,24 @@ import re
 import tomllib
 
 
+def logical_path(path):
+    value = str(path)
+    if os.name == 'nt':
+        if value.startswith('\\\\?\\UNC\\'):
+            value = '\\\\' + value[8:]
+        elif value.startswith('\\\\?\\') and re.match(r'[A-Za-z]:[\\/]', value[4:]):
+            value = value[4:]
+    return Path(value)
+
+
+def filesystem_path(path):
+    path = logical_path(path).absolute()
+    value = str(path)
+    if os.name == 'nt':
+        value = '\\\\?\\UNC\\' + value[2:] if value.startswith('\\\\') else '\\\\?\\' + value
+    return Path(value)
+
+
 def write_json(path: Path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.tmp')
@@ -29,7 +47,7 @@ def load_config(path: Path) -> dict:
     base = path.parent
     def absolute(value):
         p = Path(os.path.expandvars(value)).expanduser()
-        return str((p if p.is_absolute() else base / p).resolve())
+        return str(logical_path((p if p.is_absolute() else base / p).resolve()))
     cfg['codex_home'] = absolute(cfg.get('codex_home', os.environ.get('CODEX_HOME', str(Path.home() / '.codex'))))
     cfg['data_dir'] = absolute(cfg['data_dir'])
     ids = set()

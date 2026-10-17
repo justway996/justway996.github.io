@@ -89,6 +89,11 @@ class QuarkClient:
         return fid
 
     def create_folder(self, name, parent):
+        matches = [item for item in self.list_children(parent) if item['file_name'] == name]
+        if matches:
+            if len(matches) != 1 or not matches[0]['dir']:
+                raise ValueError('Cloud folder name is ambiguous or conflicts with a file')
+            return matches[0]['fid']
         result, _ = self.run('create-folder', '--dir-path', name, '--parent-fid', parent)
         return result['data']['fid']
 

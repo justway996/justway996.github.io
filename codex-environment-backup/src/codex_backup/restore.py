@@ -12,7 +12,8 @@ from urllib.parse import parse_qs, urlparse
 
 from .archive import opened_snapshot
 from .collect import utcnow
-from .model import safe_id, write_json
+from .model import filesystem_path, logical_path, safe_id, write_json
+from .projects import write_project_index
 
 
 def safe_member(name: str):
@@ -120,8 +121,128 @@ def export_chats(target, manifest):
     return dict(exported_messages=exports, warnings=failures)
 
 
+def validate_directory_links(rows, root_ids, members):
+    if not isinstance(rows, list):
+        raise ValueError('Invalid directory link plan')
+    directories = {str(safe_member(info.filename)).casefold() for info in members if info.is_dir()}
+    occupied = {str(safe_member(info.filename)).casefold() for info in members}
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {'path', 'target'} or not all(isinstance(value, str) for value in row.values()):
+            raise ValueError('Invalid directory link entry')
+        path, target = safe_member(row['path']), safe_member(row['target'])
+        for value in [path, target]:
+            if len(value.parts) < 2 or value.parts[0] != 'roots' or value.parts[1] not in root_ids:
+                raise ValueError('Unexpected directory link root')
+        key = str(path).casefold()
+        if key in seen or key in occupied or str(target).casefold() not in directories or str(path.parent).casefold() not in directories:
+            raise ValueError('Directory link conflicts with archive or lacks a captured target')
+        seen.add(key)
+
+
+def restore_directory_links(destination, rows):
+    restored, pending = 0, []
+    for row in rows:
+        path, target = destination / row['path'], destination / row['target']
+        try:
+            import os
+            if os.name == 'nt':
+                create_junction(path, target)
+                if not path.is_dir() or logical_path(path.resolve()) != logical_path(target.resolve()):
+                    raise OSError('Restored directory junction does not resolve to captured target')
+            else:
+                path.symlink_to(os.path.relpath(target, path.parent), target_is_directory=True)
+            restored += 1
+        except OSError as exc:
+            pending.append(dict(**row, error=f'{type(exc).__name__}: {exc}'))
+    return dict(restored=restored, pending=pending)
+
+
+def create_junction(path, target):
+    # Native substitute names avoid _winapi.CreateJunction's MAX_PATH check and
+    # its incorrect prefix when passed an already extended target path.
+    import ctypes
+    from ctypes import wintypes
+    import struct
+    name = str(logical_path(target))
+    substitute = ('\\??\\UNC\\' + name[2:] if name.startswith('\\\\') else '\\??\\' + name).encode('utf-16le')
+    display = name.encode('utf-16le')
+    names = substitute + b'\0\0' + display + b'\0\0'
+    if len(names) + 16 > 16384:
+        raise OSError('Directory junction target exceeds Windows reparse buffer limit')
+    payload = struct.pack('<IHHHHHH', 0xA0000003, len(names) + 8, 0,
+                          0, len(substitute), len(substitute) + 2, len(display)) + names
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                       wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    create.restype = wintypes.HANDLE
+    control = kernel.DeviceIoControl
+    control.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                        wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    control.restype = wintypes.BOOL
+    close = kernel.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    path.mkdir()
+    try:
+        handle = create(str(path), 0x40000000, 0, None, 3, 0x02200000, None)
+        if handle == ctypes.c_void_p(-1).value:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            buffer = ctypes.create_string_buffer(payload)
+            returned = wintypes.DWORD()
+            if not control(handle, 0x000900A4, buffer, len(payload), None, 0, ctypes.byref(returned), None):
+                raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            close(handle)
+    except OSError:
+        path.rmdir()
+        raise
+
+
+def validate_git_worktrees(rows, root_ids, members):
+    if not isinstance(rows, list):
+        raise ValueError('Invalid Git worktree plan')
+    files = {str(safe_member(info.filename)) for info in members if not info.is_dir()}
+    directories = {str(safe_member(info.filename)) for info in members if info.is_dir()}
+    seen_paths, seen_targets = set(), set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {'path', 'target', 'common'} or not all(isinstance(value, str) for value in row.values()):
+            raise ValueError('Invalid Git worktree entry')
+        path, target, common = (safe_member(row[key]) for key in ['path', 'target', 'common'])
+        for value in [path, target, common]:
+            if len(value.parts) < 2 or value.parts[0] != 'roots' or value.parts[1] not in root_ids:
+                raise ValueError('Unexpected Git worktree root')
+        required = {str(path), str(target / 'gitdir'), str(target / 'commondir'), str(common / 'HEAD'), str(common / 'config')}
+        if path.name != '.git' or target.parent != common / 'worktrees' or not required <= files or not {str(target), str(common / 'objects')} <= directories:
+            raise ValueError('Git worktree administration was not captured')
+        if str(path).casefold() in seen_paths or str(target).casefold() in seen_targets:
+            raise ValueError('Duplicate Git worktree mapping')
+        seen_paths.add(str(path).casefold())
+        seen_targets.add(str(target).casefold())
+
+
+def restore_git_worktrees(destination, rows):
+    restored, pending, changes = 0, [], []
+    for row in rows:
+        path, target, common = (destination / row[key] for key in ['path', 'target', 'common'])
+        try:
+            for file, value in [(target / 'commondir', logical_path(common).as_posix() + '\n'),
+                                (target / 'gitdir', logical_path(path).as_posix() + '\n'),
+                                (path, 'gitdir: ' + logical_path(target).as_posix() + '\n')]:
+                before = hashlib.sha256(file.read_bytes()).hexdigest()
+                file.write_text(value, encoding='utf-8')
+                changes.append(dict(path=file.relative_to(destination).as_posix(), original_sha256=before,
+                    restored_sha256=hashlib.sha256(file.read_bytes()).hexdigest()))
+            restored += 1
+        except OSError as exc:
+            pending.append(dict(**row, error=f'{type(exc).__name__}: {exc}'))
+    return dict(restored=restored, pending=pending, rewritten_files=changes)
+
+
 def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
-    destination = Path(destination).absolute()
+    destination = filesystem_path(destination)
     if destination.is_symlink() or (destination.exists() and any(destination.iterdir())):
         raise FileExistsError('Restore target must be empty')
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -148,6 +269,10 @@ def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
                         raise ValueError('Unexpected archive root')
                 if not info.is_dir() and str(path) not in expected | {'manifest.json'}:
                     raise ValueError('Unlisted archive content')
+            directory_links = manifest.get('directory_links', [])
+            validate_directory_links(directory_links, root_ids, zf.infolist())
+            git_worktrees = manifest.get('git_worktrees', [])
+            validate_git_worktrees(git_worktrees, root_ids, zf.infolist())
             # Validation above finishes before the first archive file is written.
             for info in zf.infolist():
                 output = target / safe_member(info.filename)
@@ -157,9 +282,13 @@ def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
                     output.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(info) as src, output.open('xb') as dst:
                         shutil.copyfileobj(src, dst, 1024 * 1024)
-            mapping = {r['id']: dict(source=r['path'], restored=str(destination / 'roots' / r['id']),
+            for row in directory_links:
+                if (target / row['path']).exists():
+                    raise ValueError('Directory link conflicts with extracted content')
+            mapping = {r['id']: dict(source=r['path'], restored=str(logical_path(destination / 'roots' / r['id'])),
                                     vault_name=r.get('name')) for r in manifest['roots']}
             write_json(target / 'PATH-MAPPING.json', mapping)
+            write_project_index(target, destination, manifest)
             report = dict(format_version=1, restored_at=utcnow(), state='restored_needs_setup', files_verified=True,
                 **check_environment(target), coverage=manifest.get('coverage', []),
                 project_status=manifest.get('handoff', {}).get('project_status', 'unknown'),
@@ -172,7 +301,7 @@ def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
                 f"原状态：{handoff.get('project_status', 'unknown')}；项目卡引用：{handoff.get('project_card') or '未知'}。\n\n"
                 '1. 读取 manifest.json、PATH-MAPPING.json 和 RESTORE-REPORT.json。\n'
                 '2. 在 roots 中找到项目卡、原 CONTINUE.md、AGENTS.md；保留草案及暂停状态。\n'
-                '3. 核对依赖、锁文件、数据库/素材、授权和启动/验证命令；未知不得当成已通过。\n'
+                '3. 读取 PROJECTS.md/PROJECTS.json 核对依赖、锁文件、启动/验证命令；检查数据库/素材与授权；未知不得当成已通过。\n'
                 '4. 让用户确认接续任务，执行已授权验证后再继续开发。\n\n'
                 '活动账号数据库未被覆盖；自动任务、插件、规则未被激活。代码运行及跨机接续尚未验证。\n', encoding='utf-8')
             (target / 'START-HERE.md').write_text('先读 CONTINUE.md。原始工程和知识库在 roots/<id>。恢复结果尚需环境与项目运行验证。\n', encoding='utf-8')
@@ -180,4 +309,10 @@ def restore(snapshot: Path, destination: Path, recovery_key: bytes) -> dict:
             # Empty destination only; no recursive deletion.
             destination.rmdir()
         target.rename(destination)
+        report['git_worktrees'] = restore_git_worktrees(destination, git_worktrees)
+        report['directory_links'] = restore_directory_links(destination, directory_links)
+        report['file_verification_scope'] = 'Snapshot bytes verified before recorded Git pointer rewrites; immutable snapshot retains originals'
+        if report['directory_links']['pending'] or report['git_worktrees']['pending']:
+            report['state'] = 'restored_needs_path_repairs'
+        write_json(destination / 'RESTORE-REPORT.json', report)
     return report

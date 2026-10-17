@@ -73,6 +73,39 @@ class CollectTests(unittest.TestCase):
         result = collect(cfg, self.base / 'stage')
         self.assertFalse(result['complete'])
 
+    def test_codex_worktree_dependency_locks_are_preserved_and_runtime_locks_reported(self):
+        project = self.source / 'worktrees/fixture/project'
+        project.mkdir(parents=True)
+        for name in ['poetry.lock', 'yarn.lock', 'package-lock.json']:
+            (project / name).write_text('exact dependency versions', encoding='utf-8')
+        (self.source / '.sqlite-maintenance.lock').write_bytes(b'process lock')
+        cfg = load_config(self.cfgpath)
+        cfg['roots'][0]['kind'] = 'codex'
+        result = collect(cfg, self.base / 'stage')
+        self.assertEqual(len(result['files']), 3)
+        self.assertTrue(any(x.get('path') == '.sqlite-maintenance.lock' and x['state'] == 'rebuildable' for x in result['coverage']))
+
+    def test_explicit_file_exclusion_is_reported_without_reading(self):
+        (self.source / 'installer.bin').write_bytes(b'generated installer')
+        (self.source / 'business.txt').write_text('keep', encoding='utf-8')
+        cfg = load_config(self.cfgpath)
+        cfg['roots'][0]['exclude'] = ['installer.bin']
+        result = collect(cfg, self.base / 'stage')
+        self.assertEqual([f['path'] for f in result['files']], ['roots/p/business.txt'])
+        self.assertTrue(any(x.get('path') == 'installer.bin' and x['reason'] == 'Explicit exclusion' for x in result['coverage']))
+
+    def test_codex_provisioning_guard_is_transient_but_project_file_is_kept(self):
+        name = '.codex-provisioning-fixture.guard'
+        (self.source / name).write_bytes(b'process lock')
+        cfg = load_config(self.cfgpath)
+        cfg['roots'][0]['kind'] = 'codex'
+        result = collect(cfg, self.base / 'codex-stage')
+        self.assertFalse(result['files'])
+        self.assertTrue(any(x.get('path') == name and x['state'] == 'rebuildable' for x in result['coverage']))
+        cfg['roots'][0]['kind'] = 'project'
+        result = collect(cfg, self.base / 'project-stage')
+        self.assertEqual([x['path'] for x in result['files']], ['roots/p/' + name])
+
     def test_codex_browser_login_profile_excluded_but_project_browser_assets_preserved(self):
         profile = self.source / 'browser' / 'profile'
         profile.mkdir(parents=True)

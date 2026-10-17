@@ -13,7 +13,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from .collect import sha256, utcnow
-from .model import write_json
+from .model import filesystem_path, logical_path, write_json
 
 PART_SIZE = 64 * 1024 * 1024
 DEFAULT_PART_SIZE = 32 * 1024 * 1024
@@ -40,7 +40,7 @@ def seal(staging: Path, outbox: Path, recovery_key: bytes, *, part_size=DEFAULT_
     check_key(recovery_key)
     if not 128 <= part_size <= PART_SIZE:
         raise ValueError('Invalid volume size')
-    staging, outbox = Path(staging).resolve(), Path(outbox).resolve()
+    staging, outbox = filesystem_path(Path(staging).resolve()), filesystem_path(Path(outbox).resolve())
     if outbox.is_relative_to(staging):
         raise ValueError('Outbox must be outside staging')
     manifest = json.loads((staging / 'manifest.json').read_text(encoding='utf-8'))
@@ -58,7 +58,7 @@ def seal(staging: Path, outbox: Path, recovery_key: bytes, *, part_size=DEFAULT_
     with tempfile.TemporaryDirectory(prefix='.packing-', dir=outbox) as temp_name:
         temp = Path(temp_name)
         archive = temp / 'payload.zip'
-        with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True, strict_timestamps=False) as zf:
             for file in sorted(staging.rglob('*')):
                 if file.is_symlink():
                     raise ValueError('Staging contains a link')
@@ -81,13 +81,13 @@ def seal(staging: Path, outbox: Path, recovery_key: bytes, *, part_size=DEFAULT_
         verify_snapshot(payload, recovery_key)
         target = outbox / sid
         payload.rename(target)
-    return target
+    return logical_path(target)
 
 
 @contextmanager
 def opened_snapshot(snapshot: Path, recovery_key: bytes):
     check_key(recovery_key)
-    snapshot = Path(snapshot).resolve()
+    snapshot = filesystem_path(Path(snapshot).resolve())
     if (snapshot / 'envelope.json').stat().st_size > 16 * 1024 * 1024:
         raise ValueError('Envelope too large')
     envelope = json.loads((snapshot / 'envelope.json').read_text(encoding='utf-8'))
@@ -118,7 +118,7 @@ def opened_snapshot(snapshot: Path, recovery_key: bytes):
             if zf.getinfo('manifest.json').file_size > 64 * 1024 * 1024:
                 raise ValueError('Manifest too large')
             manifest = json.loads(zf.read('manifest.json'))
-            if manifest.get('format_version') != 1:
+            if manifest.get('format_version') not in {1, 2}:
                 raise ValueError('Unsupported manifest')
             for item in manifest['files']:
                 info = zf.getinfo(item['path'])

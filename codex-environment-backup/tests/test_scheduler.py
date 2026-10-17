@@ -70,6 +70,12 @@ class SchedulerTests(unittest.TestCase):
         self.assertIn('InteractiveToken', xml)
         self.assertIn('worker', xml)
 
+    def test_schedule_uses_selected_interval_and_rejects_invalid_values(self):
+        self.assertIn('PT240M', schedule_xml(Path('C:/backup/worker.exe'), Path('C:/backup/config.json'), 240))
+        for minutes in [0, -1, True, 1.5, 1441]:
+            with self.subTest(minutes=minutes), self.assertRaises(ValueError):
+                schedule_xml(Path('worker.exe'), Path('config.json'), minutes)
+
     def test_cloud_target_change_is_reverified(self):
         cfg = json.loads(self.config.read_text())
         one, two = self.base / 'remote-one', self.base / 'remote-two'
@@ -92,6 +98,37 @@ class SchedulerTests(unittest.TestCase):
             second = run_once(self.config)
         self.assertEqual(second['state'], 'cloud_verified')
         self.assertTrue(list(two.glob('*/COMPLETE.json')))
+
+    def test_verified_old_versions_check_metadata_without_downloading_all_volumes_again(self):
+        cfg = json.loads(self.config.read_text())
+        remote = self.base / 'remote'
+        remote.mkdir()
+        cfg['cloud'] = dict(enabled=True, path=str(remote))
+        self.config.write_text(json.dumps(cfg))
+        new_key(self.base / 'data', self.base / 'offline.key')
+        downloads = []
+        class Client(LocalDrive):
+            notices = []
+            fail = False
+            def __init__(self, *args):
+                pass
+            def resolve_path(self, path):
+                return path
+            def download(self, fid, destination):
+                downloads.append(Path(fid).name)
+                return super().download(fid, destination)
+        with patch('codex_backup.scheduler.QuarkClient', Client):
+            first = run_once(self.config)
+            downloads.clear()
+            second = run_once(self.config)
+            self.assertFalse(any(name.endswith('.aes') for name in downloads))
+            self.assertIn('envelope.json', downloads)
+            self.assertEqual(second['cloud_verified_at'], first['cloud_verified_at'])
+            self.assertEqual(second['cloud_check_scope'], 'previous_full_bytes_and_current_metadata')
+            next((remote / first['snapshot_id']).glob('*.aes')).unlink()
+            downloads.clear()
+            run_once(self.config)
+            self.assertTrue(any(name.endswith('.aes') for name in downloads))
 
     def test_new_empty_directory_creates_a_version(self):
         new_key(self.base / 'data', self.base / 'offline.key')
