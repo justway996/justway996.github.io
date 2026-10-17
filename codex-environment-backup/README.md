@@ -26,7 +26,7 @@ Windows 备份工具 v0.2.0。本地采集、加密分卷、空目录恢复、�
 
 创建配置时必须逐项确认工程、Codex 目录和两个知识库。输出目录放在所有采集根之外；恢复密钥放在采集范围和备份数据之外，建议离线 U 盘。先做一个小项目的恢复演练，再扩大范围。
 
-详细步骤见 [START-HERE](docs/START-HERE.zh-CN.md)；采集边界见 [coverage-rules](docs/coverage-rules.zh-CN.md)。
+详细步骤见 [START-HERE](docs/START-HERE.zh-CN.md)；换机入口见 [新电脑接续](docs/NEW-COMPUTER.zh-CN.md)；采集边界见 [coverage-rules](docs/coverage-rules.zh-CN.md)。
 
 ## 开发与构建
 
