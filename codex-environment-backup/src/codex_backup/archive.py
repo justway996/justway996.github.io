@@ -16,6 +16,7 @@ from .collect import sha256, utcnow
 from .model import write_json
 
 PART_SIZE = 64 * 1024 * 1024
+DEFAULT_PART_SIZE = 32 * 1024 * 1024
 
 
 def canonical(value):
@@ -35,7 +36,7 @@ def check_key(key):
         raise ValueError('A 32-byte recovery key is required')
 
 
-def seal(staging: Path, outbox: Path, recovery_key: bytes, *, part_size=PART_SIZE) -> Path:
+def seal(staging: Path, outbox: Path, recovery_key: bytes, *, part_size=DEFAULT_PART_SIZE) -> Path:
     check_key(recovery_key)
     if not 128 <= part_size <= PART_SIZE:
         raise ValueError('Invalid volume size')

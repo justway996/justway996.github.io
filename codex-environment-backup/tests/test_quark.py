@@ -85,3 +85,16 @@ class QuarkTests(unittest.TestCase):
                     patch.object(client, 'wsl', return_value=subprocess.CompletedProcess([], 0, b'', b'')):
                 with self.assertRaisesRegex(RuntimeError, 'read-only'):
                     client.run('browse', '--parent-fid', '0')
+
+    def test_oversize_volume_stopped_before_uploading_unrestorable_data(self):
+        Path('.test-work').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir='.test-work') as temp:
+            file = Path(temp) / 'oversize.aes'
+            with file.open('wb') as stream:
+                stream.truncate(50 * 1024 * 1024 + 1)
+            client = QuarkClient({'distribution': 'CodexBackup', 'script': '/opt/quark/scripts/quark-drive.cjs'}, Path(temp))
+            with patch.object(client, 'linux_path', return_value='/runtime/file'), \
+                    patch.object(client, 'run', return_value=({'data': {'fids': ['uploaded']}}, [])) as run:
+                with self.assertRaisesRegex(ValueError, '32 MiB'):
+                    client.upload(file, 'parent')
+                run.assert_not_called()

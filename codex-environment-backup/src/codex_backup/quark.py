@@ -93,6 +93,8 @@ class QuarkClient:
         return result['data']['fid']
 
     def upload(self, local, parent):
+        if Path(local).stat().st_size > 50 * 1024 * 1024:
+            raise ValueError('Quark download limit is 50 MiB; repack this snapshot using 32 MiB volumes')
         result, records = self.run('upload', self.linux_path(local), '--parent-fid', parent)
         fids = result['data'].get('fids', [])
         if len(fids) != 1:
