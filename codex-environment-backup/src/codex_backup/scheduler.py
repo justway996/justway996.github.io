@@ -1,5 +1,6 @@
 """One-shot worker and opt-in current-user task. No task is installed on import."""
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 import hashlib
 import json
 import os
@@ -97,9 +98,10 @@ def schedule_xml(executable: Path, config_path: Path, interval_minutes=30):
     if type(interval_minutes) is not int or not 1 <= interval_minutes <= 1440:
         raise ValueError('Schedule interval must be 1 to 1440 whole minutes')
     arguments = subprocess.list2cmdline(['worker', '--config', str(config_path)])
+    start = (datetime.now().astimezone() + timedelta(minutes=interval_minutes)).replace(microsecond=0).isoformat()
     return f'''<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-<Triggers><LogonTrigger><Enabled>true</Enabled><Repetition><Interval>PT{interval_minutes}M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition></LogonTrigger></Triggers>
+<Triggers><TimeTrigger><Repetition><Interval>PT{interval_minutes}M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><StartBoundary>{start}</StartBoundary><Enabled>true</Enabled></TimeTrigger></Triggers>
 <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
 <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT6H</ExecutionTimeLimit></Settings>
 <Actions Context="Author"><Exec><Command>{escape(str(executable))}</Command><Arguments>{escape(arguments)}</Arguments></Exec></Actions>
@@ -122,4 +124,4 @@ def install_schedule(config_path: Path):
     if p.returncode:
         raise RuntimeError('Windows rejected scheduled task registration')
     return dict(task_name=name, interval_minutes=interval, requires_logged_in_user=True,
-        note='Runs at next logon and repeats; use backup now for the first run')
+        note='First timed run is one interval after registration; use backup now for an immediate run')

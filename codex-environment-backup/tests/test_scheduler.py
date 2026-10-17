@@ -4,6 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 import sqlite3
+from datetime import datetime, timedelta
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 from codex_backup.scheduler import run_once, lock, schedule_xml
@@ -75,6 +77,17 @@ class SchedulerTests(unittest.TestCase):
         for minutes in [0, -1, True, 1.5, 1441]:
             with self.subTest(minutes=minutes), self.assertRaises(ValueError):
                 schedule_xml(Path('worker.exe'), Path('config.json'), minutes)
+
+    def test_schedule_has_a_future_run_without_requiring_another_logon(self):
+        before = datetime.now().astimezone()
+        xml = ET.fromstring(schedule_xml(Path('worker.exe'), Path('config.json'), 240))
+        namespace = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}
+        start = xml.find('t:Triggers/t:TimeTrigger/t:StartBoundary', namespace)
+        self.assertIsNotNone(start)
+        scheduled = datetime.fromisoformat(start.text)
+        self.assertGreaterEqual(scheduled, before + timedelta(minutes=240, seconds=-1))
+        self.assertLessEqual(scheduled, datetime.now().astimezone() + timedelta(minutes=240))
+        self.assertIsNone(xml.find('t:Triggers/t:LogonTrigger', namespace))
 
     def test_cloud_target_change_is_reverified(self):
         cfg = json.loads(self.config.read_text())

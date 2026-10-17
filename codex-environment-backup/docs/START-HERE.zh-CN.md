@@ -23,7 +23,7 @@ cloud 配置包括 WSL 发行版 distribution、WSL 内官方 `quark-drive.cjs` 
 
 ## 定时任务
 
-发行 exe 支持 install-schedule，默认每 30 分钟检查，可在配置加入 `"schedule": {"interval_minutes": 240}` 改为每 4 小时（范围 1—1440 整数分钟）。当前用户保持登录时运行；默认未注册。点击启用前完成范围、密钥、磁盘容量和小样本演练。注册后的周期从下次登录开始；当前立即运行用“立即备份”。任务使用同发行目录中的 CodexEnvironmentBackupWorker.exe，无控制台窗口。保持整个发行目录位置固定。
+发行 exe 支持 install-schedule，默认每 30 分钟检查，可在配置加入 `"schedule": {"interval_minutes": 240}` 改为每 4 小时（范围 1—1440 整数分钟）。当前用户保持登录时运行；默认未注册。点击启用前完成范围、密钥、磁盘容量和小样本演练。注册后无需重新登录，第一轮在一个间隔后启动；当前立即运行用“立即备份”。任务使用同发行目录中的 CodexEnvironmentBackupWorker.exe，无控制台窗口。保持整个发行目录位置固定。
 
 Windows 任务计划程序中可找到 CodexEnvironmentBackup-<配置标识>；停用任务不删除版本。每个变化版本独立保存，首版不自动删除历史，大范围频繁备份会持续占用本地和网盘空间。不承诺关机、注销或睡眠期间仍能备份。
 

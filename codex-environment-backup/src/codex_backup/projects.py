@@ -1,6 +1,6 @@
 """Recorded project declarations; commands are never executed by indexing."""
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 import tomllib
 
 from .model import logical_path, write_json
