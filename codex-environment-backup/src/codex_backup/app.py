@@ -91,7 +91,7 @@ def gui(smoke=False):
     from tkinter import ttk, filedialog, messagebox, simpledialog
     import threading
     window = tk.Tk()
-    window.title('Codex 工作环境备份 · 0.2.2 迁移验证版')
+    window.title('Codex 工作环境备份 · 0.2.3 迁移验证版')
     window.geometry('900x620')
     selected = tk.StringVar()
     ttk.Label(window, text='完整备份与恢复', font=('Microsoft YaHei UI', 19)).pack(anchor='w', padx=20, pady=(18, 4))

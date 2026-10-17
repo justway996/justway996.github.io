@@ -12,6 +12,8 @@ sys.path.insert(0, str(workspace/'src'))
 from codex_backup.restore import restore
 
 results = []
+temporary_root = workspace / '.test-work'
+temporary_root.mkdir(exist_ok=True)
 for count in [4000, 16000]:
     files = [dict(path=f'roots/r/file-{i}.txt') for i in range(count)]
     infos = [SimpleNamespace(filename=item['path'],external_attr=0,is_dir=lambda:False) for item in files]
@@ -20,7 +22,7 @@ for count in [4000, 16000]:
     @contextlib.contextmanager
     def opened(*args):
         yield SimpleNamespace(infolist=lambda:infos), manifest
-    with tempfile.TemporaryDirectory() as temp:
+    with tempfile.TemporaryDirectory(dir=temporary_root) as temp:
         start=time.perf_counter()
         with patch('codex_backup.restore.opened_snapshot',opened):
             try:

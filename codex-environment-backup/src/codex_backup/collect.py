@@ -129,7 +129,7 @@ def collect(config: dict, staging: Path) -> dict:
     staging.mkdir(parents=True)
     files, coverage, roots, pending_links, pending_git = [], [], [], [], []
     secrets = {'auth.json', '.env.bak', 'credentials.json', 'token.json', 'tokens.json'}
-    transient = {'.sandbox', '.sandbox-secrets', '.tmp', 'thread-writer-locks', '__pycache__', '.pytest_cache', '.superpowers'}
+    transient = {'.sandbox', '.sandbox-secrets', '.tmp', 'thread-writer-locks', '__pycache__', '.pytest_cache'}
     for root in discovery['roots']:
         entry = dict(root)
         roots.append(entry)

@@ -41,6 +41,8 @@ class CollectTests(unittest.TestCase):
             return subprocess.run(['git', '-c', f'safe.directory={self.source.as_posix()}', '-C', str(self.source), *args], check=True, capture_output=True).stdout
         git('init', '-b', 'work')
         (self.source / 'main.py').write_text('print(1)', encoding='utf-8')
+        (self.source / '.superpowers/sdd').mkdir(parents=True)
+        (self.source / '.superpowers/sdd/task-report.md').write_text('Verified work and next steps', encoding='utf-8')
         git('add', '.')
         git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'base')
         (self.source / 'main.py').write_text('print(2)', encoding='utf-8')
@@ -56,6 +58,20 @@ class CollectTests(unittest.TestCase):
         after = subprocess.run(['git', '-c', f'safe.directory={copied.as_posix()}', '-C', str(copied), 'status', '--porcelain=v1', '-uall'], check=True, capture_output=True).stdout
         self.assertEqual(before, after)
         self.assertEqual((copied / 'business.dat').read_bytes(), b'important')
+
+    def test_development_reports_are_preserved_in_project_and_codex_worktrees(self):
+        relative = 'worktrees/project/.superpowers/sdd/task-report.md'
+        report = self.source / relative
+        report.parent.mkdir(parents=True)
+        report.write_text('Unfinished work, verification and next steps', encoding='utf-8')
+        for kind in ['project', 'codex']:
+            with self.subTest(kind=kind):
+                cfg = load_config(self.cfgpath)
+                cfg['roots'][0]['kind'] = kind
+                stage = self.base / ('stage-' + kind)
+                manifest = collect(cfg, stage)
+                self.assertIn('roots/p/' + relative, [item['path'] for item in manifest['files']])
+                self.assertEqual((stage / 'roots/p' / relative).read_bytes(), report.read_bytes())
 
     def test_credentials_excluded_and_missing_dependency_reported(self):
         (self.source / 'auth.json').write_text('secret', encoding='utf-8')
