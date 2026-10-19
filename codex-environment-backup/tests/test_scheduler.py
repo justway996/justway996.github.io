@@ -89,6 +89,12 @@ class SchedulerTests(unittest.TestCase):
         self.assertLessEqual(scheduled, datetime.now().astimezone() + timedelta(minutes=240))
         self.assertIsNone(xml.find('t:Triggers/t:LogonTrigger', namespace))
 
+    def test_long_backup_is_not_stopped_or_overlapped_by_the_next_trigger(self):
+        xml = ET.fromstring(schedule_xml(Path('worker.exe'), Path('config.json'), 240))
+        namespace = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}
+        self.assertEqual(xml.find('t:Settings/t:ExecutionTimeLimit', namespace).text, 'PT0S')
+        self.assertEqual(xml.find('t:Settings/t:MultipleInstancesPolicy', namespace).text, 'IgnoreNew')
+
     def test_cloud_target_change_is_reverified(self):
         cfg = json.loads(self.config.read_text())
         one, two = self.base / 'remote-one', self.base / 'remote-two'

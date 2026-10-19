@@ -2,7 +2,7 @@
 
 ## 先取得工具和密钥
 
-在夸克网页版或客户端打开 `/CodexWorkspace/RecoveryTools/v0.2.3`，下载完整 Windows ZIP、SHA256SUMS.txt 和本指南。核对 ZIP 的 SHA256，再解压到固定目录，保留 `_internal` 和两个 exe。恢复配置示例和安装指南在发行目录的 docs 中。该工具包不含个人聊天、登录态或恢复密钥。源码在用户仓库的 [独立目录](https://github.com/justway996/justway996.github.io/tree/main/codex-environment-backup)。
+在夸克网页版或客户端打开 `/CodexWorkspace/RecoveryTools/v0.2.4`，下载完整 Windows ZIP、SHA256SUMS.txt 和本指南。核对 ZIP 的 SHA256，再解压到固定目录，保留 `_internal` 和两个 exe。恢复配置示例和安装指南在发行目录的 docs 中。该工具包不含个人聊天、登录态或恢复密钥。源码在用户仓库的 [独立目录](https://github.com/justway996/justway996.github.io/tree/main/codex-environment-backup)。
 
 恢复密钥从单独保存的 U 盘或其他独立位置取得。原 Windows 的 DPAPI 副本不能替代它。换 Codex 账号不需要旧 Codex 登录态；夸克账号仍须有权访问该网盘目录。
 
