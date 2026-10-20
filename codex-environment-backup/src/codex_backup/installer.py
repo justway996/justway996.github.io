@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import zipfile
 
+from .model import filesystem_path, logical_path
+
 
 def _relative(name):
     path = PurePosixPath(name)
@@ -69,7 +71,7 @@ def _inspect(archive):
 
 
 def install_release(payload: Path, destination: Path) -> dict:
-    destination = Path(destination).resolve()
+    destination = filesystem_path(Path(destination).resolve())
     with zipfile.ZipFile(payload) as archive:
         members, sums, version = _inspect(archive)
         target = destination / version
@@ -81,7 +83,7 @@ def install_release(payload: Path, destination: Path) -> dict:
                 with path.open('rb') as stream:
                     if _digest(stream) != digest:
                         raise ValueError('已有安装被修改，未覆盖；请选择其他安装位置')
-            return dict(version=version, installed=str(target), reused=True)
+            return dict(version=version, installed=str(logical_path(target)), reused=True)
         destination.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix='.install-', dir=destination) as temp:
             stage = Path(temp) / version
@@ -96,7 +98,7 @@ def install_release(payload: Path, destination: Path) -> dict:
                     if _digest(stream) != digest:
                         raise ValueError('安装文件写入后校验失败')
             stage.rename(target)
-    return dict(version=version, installed=str(target), reused=False)
+    return dict(version=version, installed=str(logical_path(target)), reused=False)
 
 
 def _ps_literal(value):

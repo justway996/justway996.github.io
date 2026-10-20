@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from codex_backup.installer import installer_main, install_release
+from codex_backup.model import filesystem_path
 
 
 def main():
@@ -20,7 +21,7 @@ def main():
             raise ValueError('安装程序内置数据校验失败')
     if args.verify_install:
         report = install_release(payload, args.verify_install)
-        (args.verify_install / 'INSTALLATION-VERIFIED.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+        (filesystem_path(args.verify_install) / 'INSTALLATION-VERIFIED.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     else:
         installer_main(payload, args.smoke)
 

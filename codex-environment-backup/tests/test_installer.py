@@ -8,6 +8,7 @@ from unittest.mock import patch
 import zipfile
 
 from codex_backup.installer import install_release, create_shortcuts
+from codex_backup.model import filesystem_path
 
 
 class InstallerTests(unittest.TestCase):
@@ -52,6 +53,21 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             install_release(self.payload(bad_hash=True), target)
         self.assertFalse(target.exists())
+
+    def test_long_destination_installs_repeats_and_preserves_modified_files(self):
+        with tempfile.TemporaryDirectory(dir=filesystem_path(self.base)) as temp:
+            target = Path(temp) / ('a' * 80) / ('b' * 80)
+            self.assertGreater(len(str(target.resolve() / '0.3.0/_internal/runtime.dat')), 260)
+            payload = self.payload()
+            first = install_release(payload, target)
+            self.assertFalse(first['installed'].startswith('\\\\?\\'))
+            self.assertTrue(install_release(payload, target)['reused'])
+            runtime = filesystem_path(Path(first['installed']) / '_internal/runtime.dat')
+            self.assertEqual(runtime.read_bytes(), b'runtime')
+            runtime.write_bytes(b'user modified')
+            with self.assertRaises(ValueError):
+                install_release(payload, target)
+            self.assertEqual(runtime.read_bytes(), b'user modified')
 
     def test_paths_and_unlisted_files_are_rejected_before_writes(self):
         names = ['../escaped', '/absolute', 'C:/drive', '//host/share', 'bundle/../escape',
