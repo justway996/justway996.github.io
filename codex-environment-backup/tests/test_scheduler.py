@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
-from codex_backup.scheduler import run_once, lock, schedule_xml
+from codex_backup.scheduler import run_once, lock, schedule_xml, install_schedule
 from codex_backup.credentials import protect, unprotect, new_key, read_key
 from test_transfer import LocalDrive
 
@@ -94,6 +94,69 @@ class SchedulerTests(unittest.TestCase):
         namespace = {'t': 'http://schemas.microsoft.com/windows/2004/02/mit/task'}
         self.assertEqual(xml.find('t:Settings/t:ExecutionTimeLimit', namespace).text, 'PT0S')
         self.assertEqual(xml.find('t:Settings/t:MultipleInstancesPolicy', namespace).text, 'IgnoreNew')
+
+    def test_existing_task_is_preserved_without_rebinding_its_worker(self):
+        import sys
+        from subprocess import CompletedProcess
+        exe = self.base / 'app.exe'
+        exe.with_name('CodexEnvironmentBackupWorker.exe').write_bytes(b'fixture')
+        new_key(self.base / 'data', self.base / 'offline.key')
+        with patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', str(exe)), patch('codex_backup.scheduler.subprocess.run',
+                return_value=CompletedProcess([], 0, b'<Task/>', b'')) as command:
+            result = install_schedule(self.config)
+        self.assertTrue(result['preserved'])
+        self.assertEqual(len(command.call_args_list), 1)
+        self.assertIn('/Query', command.call_args.args[0])
+
+    def test_new_registration_never_forces_replacement_after_query_race(self):
+        import sys
+        from subprocess import CompletedProcess
+        exe = self.base / 'app.exe'
+        exe.with_name('CodexEnvironmentBackupWorker.exe').write_bytes(b'fixture')
+        new_key(self.base / 'data', self.base / 'offline.key')
+        with patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', str(exe)), patch(
+                'codex_backup.scheduler.subprocess.run', side_effect=[CompletedProcess([], 1), CompletedProcess([], 0)]) as command:
+            install_schedule(self.config)
+        self.assertNotIn('/F', command.call_args.args[0])
+
+    def test_worker_completes_persisted_schedule_without_a_gui(self):
+        cfg = json.loads(self.config.read_text())
+        remote = self.base / 'remote'
+        remote.mkdir()
+        cfg['cloud'] = dict(enabled=True, path=str(remote))
+        self.config.write_text(json.dumps(cfg))
+        new_key(self.base / 'data', self.base / 'offline.key')
+        request = self.base / 'data/schedule-request.json'
+        request.write_text(json.dumps(dict(config_path=str(self.config.resolve()))))
+        class Client(LocalDrive):
+            notices = []
+            fail = False
+            def __init__(self, *args):
+                pass
+            def resolve_path(self, path):
+                return path
+        with patch('codex_backup.scheduler.QuarkClient', Client), patch('codex_backup.scheduler.install_schedule',
+                side_effect=RuntimeError('registration denied')):
+            pending = run_once(self.config)
+        self.assertEqual(pending['state'], 'cloud_verified')
+        self.assertEqual(pending['schedule_status'], 'pending')
+        self.assertTrue(request.exists())
+        with patch('codex_backup.scheduler.QuarkClient', Client), patch('codex_backup.scheduler.install_schedule',
+                return_value=dict(preserved=False)) as install:
+            result = run_once(self.config)
+        install.assert_called_once_with(self.config.resolve())
+        self.assertEqual(result['schedule_status'], 'enabled')
+        self.assertFalse(request.exists())
+
+    def test_unverified_backup_keeps_schedule_pending_for_retry(self):
+        new_key(self.base / 'data', self.base / 'offline.key')
+        request = self.base / 'data/schedule-request.json'
+        request.write_text(json.dumps(dict(config_path=str(self.config.resolve()))))
+        with patch('codex_backup.scheduler.install_schedule') as install:
+            result = run_once(self.config)
+        install.assert_not_called()
+        self.assertTrue(request.exists())
+        self.assertEqual(result.get('schedule_status'), 'pending')
 
     def test_cloud_target_change_is_reverified(self):
         cfg = json.loads(self.config.read_text())

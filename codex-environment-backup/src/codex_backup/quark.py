@@ -53,7 +53,8 @@ class QuarkClient:
         installation = str(PurePosixPath(self.script).parent.parent)
         if self.wsl('test', '-w', installation).returncode != 1:
             raise RuntimeError('Use a read-only official CLI installation with a dedicated WSL user')
-        p = self.wsl('env', f'--chdir={runtime}', f'HOME={runtime}', 'CODEX_ENV=1', 'node', self.script, *args, timeout=3600)
+        p = self.wsl('env', f'--chdir={runtime}', f'HOME={runtime}', 'CODEX_ENV=1',
+            'PATH=/opt/codex-quark/bin:/usr/local/bin:/usr/bin:/bin', 'node', self.script, *args, timeout=3600)
         result, records = parse_output(p.stdout.decode('utf-8', errors='replace'), p.returncode)
         if result.get('notice', {}).get('text'):
             self.notices.append(result['notice']['text'])

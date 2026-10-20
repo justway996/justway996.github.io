@@ -49,6 +49,10 @@ def run_once(config_path: Path) -> dict:
         status_path = data / 'status.json'
         previous = json.loads(status_path.read_text(encoding='utf-8')) if status_path.exists() else {}
         status = dict(previous, last_attempt=utcnow(), state='working')
+        request_path = data / 'schedule-request.json'
+        if request_path.exists():
+            status['schedule_status'] = 'pending'
+        write_json(status_path, status)
         try:
             key = read_key(data)
             with tempfile.TemporaryDirectory(prefix='.collect-', dir=filesystem_path(data)) as temp:
@@ -91,6 +95,18 @@ def run_once(config_path: Path) -> dict:
             write_json(status_path, status)
             raise
         write_json(status_path, status)
+        if status['state'] == 'cloud_verified' and request_path.exists():
+            try:
+                request = json.loads(request_path.read_text(encoding='utf-8'))
+                if Path(request['config_path']).resolve() != Path(config_path).resolve():
+                    raise ValueError('Schedule request belongs to another configuration')
+                registered = install_schedule(Path(config_path).resolve())
+                status['schedule_status'] = 'preserved' if registered.get('preserved') else 'enabled'
+                request_path.unlink()
+                status.pop('schedule_error', None)
+            except Exception as exc:
+                status.update(schedule_status='pending', schedule_error=f'{type(exc).__name__}: {exc}')
+            write_json(status_path, status)
         return status
 
 
@@ -112,6 +128,11 @@ def install_schedule(config_path: Path):
     if not getattr(sys, 'frozen', False):
         raise RuntimeError('Use the packaged exe to register a stable scheduled task')
     cfg = load_config(config_path)
+    name = 'CodexEnvironmentBackup-' + hashlib.sha256(str(Path(config_path).resolve()).encode()).hexdigest()[:12]
+    existing = subprocess.run(['schtasks.exe', '/Query', '/TN', name, '/XML'], capture_output=True)
+    if existing.returncode == 0:
+        return dict(task_name=name, preserved=True, requires_logged_in_user=True,
+            note='Existing task and its original executable/configuration binding were preserved')
     read_key(Path(cfg['data_dir']))
     executable = Path(sys.executable).with_name('CodexEnvironmentBackupWorker.exe')
     if not executable.is_file():
@@ -119,9 +140,8 @@ def install_schedule(config_path: Path):
     interval = cfg.get('schedule', {}).get('interval_minutes', 30)
     path = Path(cfg['data_dir']) / 'schedule.xml'
     path.write_text(schedule_xml(executable, Path(config_path).resolve(), interval), encoding='utf-16')
-    name = 'CodexEnvironmentBackup-' + hashlib.sha256(str(Path(config_path).resolve()).encode()).hexdigest()[:12]
-    p = subprocess.run(['schtasks.exe', '/Create', '/TN', name, '/XML', str(path), '/F'], capture_output=True)
+    p = subprocess.run(['schtasks.exe', '/Create', '/TN', name, '/XML', str(path)], capture_output=True)
     if p.returncode:
         raise RuntimeError('Windows rejected scheduled task registration')
-    return dict(task_name=name, interval_minutes=interval, requires_logged_in_user=True,
+    return dict(task_name=name, interval_minutes=interval, preserved=False, requires_logged_in_user=True,
         note='First timed run is one interval after registration; use backup now for an immediate run')

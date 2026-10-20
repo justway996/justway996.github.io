@@ -11,6 +11,15 @@ from codex_backup.model import load_config
 
 
 class AppTests(unittest.TestCase):
+    def test_cli_json_uses_utf8_even_with_an_oem_redirected_stream(self):
+        import io
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding='cp936')
+        with patch('sys.argv', ['app.exe', 'status', '--config', 'fixture.json']), patch('sys.stdout', stream), patch('codex_backup.app.action', return_value=dict(state='ok', note='中文结果')):
+            main()
+        stream.flush()
+        self.assertEqual(json.loads(raw.getvalue().decode('utf-8'))['note'], '中文结果')
+
     def test_background_entry_works_without_a_console_stream(self):
         with patch('sys.argv', ['worker.exe', 'worker', '--config', 'fixture.json']), patch('sys.stdout', None), patch('codex_backup.app.action', return_value={'state': 'cloud_verified'}):
             main()

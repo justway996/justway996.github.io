@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-environment-backup"
-version = "0.2.4"
+version = "0.3.0"
 requires-python = ">=3.12"
 dependencies = ["cryptography>=44,<52"]
 
@@ -13,3 +13,6 @@ codex-backup = "codex_backup.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+codex_backup = ["setup-dependencies.json", "setup-wsl.ps1", "setup-quark.sh"]

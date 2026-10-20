@@ -69,6 +69,9 @@ def action(command, config_path, **kwargs):
         return dict(state='local_verified', file_count=len(manifest['files']), complete=manifest['complete'])
     if command == 'install-schedule':
         return install_schedule(Path(config_path))
+    if command == 'setup-check':
+        from .bootstrap_windows import inspect_environment
+        return inspect_environment(cfg)
     client = QuarkClient(cfg['cloud'], data / 'quark-runtime')
     if command == 'cloud-check':
         return client.check()
@@ -91,7 +94,7 @@ def gui(smoke=False):
     from tkinter import ttk, filedialog, messagebox, simpledialog
     import threading
     window = tk.Tk()
-    window.title('Codex 工作环境备份 · 0.2.4 迁移验证版')
+    window.title('Codex 工作环境备份 · 0.3.0 迁移验证版')
     window.geometry('900x620')
     selected = tk.StringVar()
     ttk.Label(window, text='完整备份与恢复', font=('Microsoft YaHei UI', 19)).pack(anchor='w', padx=20, pady=(18, 4))
@@ -193,15 +196,22 @@ def gui(smoke=False):
 
 
 def main():
+    for stream in [sys.stdout, sys.stderr]:
+        if stream is not None and hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description='Codex environment backup / 工作环境备份')
-    parser.add_argument('command', nargs='?', default='gui', choices=['gui', 'gui-smoke', 'inspect', 'status', 'backup', 'worker',
+    parser.add_argument('command', nargs='?', default='setup', choices=['setup', 'setup-smoke', 'setup-check', 'gui', 'gui-smoke', 'inspect', 'status', 'backup', 'worker',
         'new-key', 'import-key', 'restore', 'verify', 'cloud-check', 'versions', 'fetch', 'install-schedule'])
     parser.add_argument('--config', type=Path)
     parser.add_argument('--key-file', type=Path)
     parser.add_argument('--snapshot', type=Path)
     parser.add_argument('--destination', type=Path)
     parser.add_argument('--snapshot-id')
+    parser.add_argument('--setup-state', type=Path)
     args = parser.parse_args()
+    if args.command in {'setup', 'setup-smoke'}:
+        from .setup_wizard import setup_gui
+        return setup_gui(args.command == 'setup-smoke', state_dir=args.setup_state)
     if args.command in {'gui', 'gui-smoke'}:
         return gui(args.command == 'gui-smoke')
     if not args.config:
